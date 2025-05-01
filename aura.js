@@ -19,7 +19,7 @@ mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTop
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error('MongoDB connection error:', err));
 
-// Aura calculation function with niche keywords
+// Aura calculation function with multilingual keywords
 function calculateSpiritualAuraPoints(text) {
   if (!text || typeof text !== 'string' || text.trim() === '') {
     return 0; // Neutral aura for empty/invalid input
@@ -29,48 +29,104 @@ function calculateSpiritualAuraPoints(text) {
   const result = sentiment.analyze(text);
   const sentimentScore = result.score;
 
-  // Expanded spiritual and Gen Z aura keywords with niche terms
+  // Multilingual aura keywords (English, Malayalam, Manglish, Hindi)
   const positiveAuraWords = [
-    // Spiritual positive terms
+    // English spiritual terms
     'joy', 'love', 'compassion', 'kindness', 'peace', 'gratitude', 'healing', 'light', 'blessing', 'hope',
     'serenity', 'divine', 'harmony', 'wisdom', 'empathy', 'grace', 'radiance', 'tranquility', 'unity', 'forgiveness',
     'inspiration', 'clarity', 'purity', 'zen', 'soulful', 'uplifting', 'sacred', 'bliss', 'devotion', 'awe',
-    // Niche spiritual terms
+    // English niche spiritual terms
     'chakra', 'cosmic', 'kundalini', 'aura', 'enlightenment', 'ascension', 'vibration', 'starseed', 'manifest', 'aligned',
     'third-eye', 'satori', 'nirvana', 'prana', 'shakti', 'etheric', 'astral', 'divinity', 'samadhi', 'lightworker',
     'kismet', 'synchronicity', 'arcane', 'mystic', 'esoteric',
-    // Gen Z positive slang
+    // English Gen Z slang
     'slay', 'vibes', 'iconic', 'real', 'authentic', 'queen', 'king', 'stan', 'inspo', 'bussin',
     'fire', 'lit', 'goat', 'legend', 'vibe', 'glow', 'energy', 'main-character', 'pop-off', 'bet',
     'fam', 'hype', 'drip', 'snack', 'yass', 'secure-the-bag', 'on-fleek', 'extra', 'thriving', 'w',
-    // Niche Gen Z slang
+    // English niche Gen Z slang
     'sksksk', 'periodt', 'vibe-check', 'and-i-oop', 'tea', 'serving', 'looks', 'snatched', 'big-yikes', 'slaps',
-    'no-skip', 'giving-life', 'mood', 'aesthetic', 'lowkey-w', 'highkey-iconic', 'bop', 'it-hits-different', 'chef-kiss', 'sheesh'
+    'no-skip', 'giving-life', 'mood', 'aesthetic', 'lowkey-w', 'highkey-iconic', 'bop', 'it-hits-different', 'chef-kiss', 'sheesh',
+    // Malayalam spiritual/emotional terms
+    'സന്തോഷം', 'സ്നേഹം', 'കരുണ', 'ദയ', 'സമാധാനം', 'നന്ദി', 'രോഗശാന്തി', 'വെളിച്ചം', 'ആശീർവാദം', 'പ്രതീക്ഷ',
+    'ശാന്തി', 'ദൈവിക', 'ഐക്യം', 'ജ്ഞാനം', 'സഹാനുഭൂതി', 'കൃപ', 'തേജസ്സ്', 'നിശ്ചലത', 'ഏകത', 'ക്ഷമ',
+    'ആത്മാവ്', 'നന്മ', 'വിശുദ്ധി', 'പ്രചോദനം', 'വിമോചനം',
+    // Malayalam niche spiritual terms
+    'ചക്രം', 'ബ്രഹ്മാണ്ഡം', 'കുണ്ഡലിനി', 'ഓറ', 'മോക്ഷം', 'ആരോഹണം', 'സ്പന്ദനം', 'നക്ഷത്രബീജം', 'പ്രകടനം', 'സമന്വയം',
+    'നെറ്റിചക്രം', 'നിർവാണം', 'പ്രാണൻ', 'ശക്തി', 'നീലാകാശം', 'നക്ഷത്രലോകം', 'ദിവ്യത', 'സമാധി', 'വെളിച്ചപ്രവർത്തകൻ',
+    // Manglish spiritual/emotional terms
+    'santhosham', 'sneham', 'karuna', 'daya', 'samadhanam', 'nandi', 'rogashanthi', 'velicham', 'ashirvad', 'pratheeksha',
+    'shanthi', 'daivika', 'aikyam', 'jnanam', 'sahanubhuthi', 'kripa', 'tejas', 'nishchalatha', 'ekatha', 'kshama',
+    'athma', 'nanma', 'vishudhi', 'prachodanam', 'vimochanam',
+    // Manglish niche spiritual terms
+    'chakram', 'brahmandam', 'kundalini', 'aura', 'moksham', 'aarohanam', 'spandanam', 'nakshatrabeejam', 'praktanam', 'samanwayam',
+    'netti-chakram', 'nirvanam', 'pranan', 'shakthi', 'neelakasham', 'nakshatralokam', 'divyatha', 'samadhi', 'velichapravarthakan',
+    // Manglish Gen Z slang
+    'poli', 'vibe', 'kidu', 'mass', 'super', 'adipoli', 'thara', 'jolly', 'chumma', 'fire',
+    'litty', 'goat', 'epic', 'slay', 'onnu-onnu', 'pinnallae', 'katta', 'vibes', 'thirichu', 'nalla',
+    // Hindi spiritual/emotional terms
+    'खुशी', 'प्यार', 'करुणा', 'दया', 'शांति', 'कृतज्ञता', 'उपचार', 'प्रकाश', 'आशीर्वाद', 'आशा',
+    'शान्ति', 'दिव्य', 'एकता', 'ज्ञान', 'सहानुभूति', 'कृपा', 'तेज', 'निश्चलता', 'सामंजस्य', 'क्षमा',
+    'आत्मा', 'सद्भाव', 'पवित्रता', 'प्रेरणा', 'मुक्ति',
+    // Hindi niche spiritual terms
+    'चक्र', 'ब्रह्मांडीय', 'कुंडलिनी', 'आभा', 'मोक्ष', 'उत्थान', 'कंपन', 'नक्षत्रबीज', 'प्रकटीकरण', 'संनाद',
+    'तृतीय-नेत्र', 'निर्वाण', 'प्राण', 'शक्ति', 'आकाशीय', 'नक्षत्रलोक', 'दिव्यता', 'समाधि', 'प्रकाशकर्मी',
+    // Hindi Gen Z slang
+    'banger', 'lit', 'vibe', 'slay', 'fire', 'epic', 'boss', 'dil-se-dil', 'mast', 'jhakaas',
+    'dhamaka', 'fatafati', 'zabardast', 'killer', 'on-point', 'desi-swag', 'bawaal', 'sahi', 'full-on', 'tadka'
   ];
   const negativeAuraWords = [
-    // Spiritual negative terms
+    // English spiritual terms
     'hate', 'anger', 'fear', 'sadness', 'toxic', 'dark', 'curse', 'jealousy', 'resentment', 'pain',
     'malice', 'dread', 'spite', 'grudge', 'sorrow', 'despair', 'negativity', 'bitterness', 'torment', 'envy',
     'chaos', 'disharmony', 'anguish', 'vile', 'gloom', 'misery', 'wrath', 'deceit', 'suffering', 'doom',
-    // Niche spiritual terms
+    // English niche spiritual terms
     'stagnation', 'karmic-debt', 'shadow', 'blockage', 'lower-vibration', 'discord', 'hex', 'jinx', 'malevolent', 'haunted',
     'eclipsed', 'astral-trap', 'soul-drain', 'void', 'dissonance', 'baneful', 'obscured', 'tainted', 'unaligned', 'cursed',
-    // Gen Z negative slang
+    // English Gen Z slang
     'cringe', 'fake', 'shady', 'sus', 'drama', 'messy', 'mid', 'clout-chaser', 'flop', 'basic',
     'salty', 'pressed', 'lame', 'ratio', 'cap', 'no-cap', 'ghosted', 'canceled', 'tea-spiller', 'try-hard',
     'extra-in-a-bad-way', 'lowkey-toxic', 'vibe-killer', 'problematic', 'red-flag', 'ick', 'overrated', 'done',
-    // Niche Gen Z slang
+    // English niche Gen Z slang
     'oop', 'flopped', 'giving-ick', 'big-yikes', 'tea-spilled', 'ratioed', 'delulu', 'situationship', 'fumbled', 'zesty',
-    'unserious', 'not-the-vibe', 'off-brand', 'giving-side-eye', 'cooked', 'out-of-pocket', 'no-maam', 'left-on-read', 'tragic', 'skipped'
+    'unserious', 'not-the-vibe', 'off-brand', 'giving-side-eye', 'cooked', 'out-of-pocket', 'no-maam', 'left-on-read', 'tragic', 'skipped',
+    // Malayalam spiritual/emotional terms
+    'വെറുപ്പ്', 'ദേഷ്യം', 'ഭയം', 'വിഷാദം', 'വിഷമയം', 'ഇരുട്ട്', 'ശാപം', 'അസൂയ', 'പക', 'വേദന',
+    'ദുരുദ്ദേശ്യം', 'ഭീതി', 'നിന്ദ', 'പിണക്കം', 'ദുഃഖം', 'നിരാശ', 'നെഗറ്റിവിറ്റി', 'കയ്പ്', 'പീഡനം', 'ഈർഷ്യ',
+    'കുഴപ്പം', 'അസന്തുലിത', 'വ്യഥ', 'നീചം', 'ഗ്ലൂം', 'ദുരിതം', 'ക്രോധം', 'വഞ്ചന', 'കഷ്ടപ്പാട്', 'വിനാശം',
+    // Malayalam niche spiritual terms
+    'നിശ്ചലത', 'കർമ്മബാധ', 'നിഴൽ', 'തടസ്സം', 'താഴ്ന്ന-സ്പന്ദനം', 'വിയോജിപ്പ്', 'ശാപഗ്രസ്ത', 'ദോഷം', 'ദുഷ്ട', 'പേടിസ്വപ്നം',
+    'ഗ്രഹണം', 'നക്ഷത്ര-കെണി', 'ആത്മ-നാശം', 'ശൂന്യത', 'വിസന്തുലനം', 'നിന്ദനീയം', 'മങ്ങിയ', 'മലിനം', 'വിട്ടുപോകൽ', 'ശപിക്കപ്പെട്ട',
+    // Manglish spiritual/emotional terms
+    'veruppu', 'deshyam', 'bhayam', 'vishadam', 'vishamayam', 'iruttu', 'shapam', 'asooya', 'paka', 'vedana',
+    'duruddeshyam', 'bheethi', 'ninda', 'pinakkam', 'dukham', 'nirasha', 'negativity', 'kaipp', 'peedanam', 'irshya',
+    'kuzhappam', 'asanthulitha', 'vyatha', 'neecham', 'gloom', 'duritham', 'krodham', 'vanchanam', 'kashtapad', 'vinasham',
+    // Manglish niche spiritual terms
+    'nishchalatha', 'karmabhaada', 'nizhal', 'thadassam', 'thaazhnna-spandanam', 'viyojipp', 'shapagrasta', 'dosham', 'dushta', 'pediswapnam',
+    'grahanam', 'nakshatrakeni', 'athmanasham', 'shoonyatha', 'visanthulanam', 'nindaneeyam', 'mangiya', 'malinam', 'vittupokkal', 'shapikkapetta',
+    // Manglish Gen Z slang
+    'thallu', 'bakwas', 'cringe', 'vatt', 'drama', 'kuzhappam', 'mid', 'fake', 'shady', 'sus',
+    'chali', 'venda', 'lame', 'flop', 'bore', 'irritating', 'over', 'no-way', 'chumma-vatt', 'pottan',
+    // Hindi spiritual/emotional terms
+    'नफरत', 'गुस्सा', 'डर', 'उदासी', 'विषाक्त', 'अंधेरा', 'शाप', 'ईर्ष्या', 'द्वेष', 'दर्द',
+    'दुर्भावना', 'भय', 'निंदा', 'मनमुटाव', 'दुख', 'निराशा', 'नकारात्मकता', 'कटुता', 'यातना', 'द्वेष',
+    'अराजकता', 'असामंजस्य', 'पीड़ा', 'नीच', 'उदासीनता', 'दुरिता', 'क्रोध', 'धोखा', 'कष्ट', 'विनाश',
+    // Hindi niche spiritual terms
+    'ठहराव', 'कर्म-ऋण', 'छाया', 'रुकावट', 'निम्न-कंपन', 'विसंगति', 'हैक्स', 'जinx', 'दुष्ट', 'भूतिया',
+    'ग्रहण', 'नक्षत्र-जाल', 'आत्म-नाश', 'शून्यता', 'असंतुलन', 'निंदनीय', 'धुंधला', 'दूषित', 'असंनाद', 'शापित',
+    // Hindi Gen Z slang
+    'cringe', 'fake', 'shady', 'sus', 'drama', 'mess', 'mid', 'flop', 'basic', 'salty',
+    'lame', 'fail', 'boring', 'irritating', 'over', 'nope', 'chhapri', 'bakwas', 'thanda', 'ghatiya'
   ];
 
+  // Normalize text for multilingual matching (lowercase, Unicode normalization)
+  const textLower = text.toLowerCase().normalize('NFKC');
+
   // Count aura-related words
-  const textLower = text.toLowerCase();
   const positiveWordCount = positiveAuraWords.reduce((count, word) => {
-    return count + (textLower.includes(word) ? 1 : 0);
+    return count + (textLower.includes(word.toLowerCase().normalize('NFKC')) ? 1 : 0);
   }, 0);
   const negativeWordCount = negativeAuraWords.reduce((count, word) => {
-    return count + (textLower.includes(word) ? 1 : 0);
+    return count + (textLower.includes(word.toLowerCase().normalize('NFKC')) ? 1 : 0);
   }, 0);
 
   // Calculate aura points
@@ -82,41 +138,46 @@ function calculateSpiritualAuraPoints(text) {
   return auraPoints;
 }
 
-// Aura visualization function
+// Aura visualization function with multilingual flair
 function visualizeAura(auraPoints, username) {
-  let color, description, chakra, genZVibe;
+  let color, description, chakra, genZVibe, multilingualFlair;
 
   if (auraPoints > 50) {
     color = 'golden';
     description = `A radiant ${color} aura pulses around ${username}, shimmering with cosmic vibrations and high-vibrational energy. It flows like a divine light, emanating from the crown chakra, filled with starseed essence and pure bliss.`;
     chakra = 'crown chakra';
     genZVibe = 'main-character energy, serving highkey-iconic looks!';
+    multilingualFlair = 'Radiating santhosham, खुशी, and poli vibes!';
   } else if (auraPoints > 0) {
     color = 'blue';
     description = `A soothing ${color} aura surrounds ${username}, rippling with tranquility and empathic waves. It glows softly from the third-eye chakra, carrying a serene, uplifting vibration.`;
     chakra = 'third-eye chakra';
     genZVibe = 'vibe-check passed, giving aesthetic and soulful energy!';
+    multilingualFlair = 'Flowing with shanthi, शांति, and kidu energy!';
   } else if (auraPoints === 0) {
     color = 'white';
     description = `A neutral ${color} aura encircles ${username}, a balanced energy field with subtle etheric swirls. It resonates from the heart chakra, reflecting a calm, unaligned state.`;
     chakra = 'heart chakra';
     genZVibe = 'lowkey chill, just existing with no drama.';
+    multilingualFlair = 'Balanced with aikyam, एकता, and nalla vibes.';
   } else if (auraPoints > -50) {
     color = 'grey';
     description = `A misty ${color} aura clings to ${username}, heavy with unaligned vibrations and faint dissonance. It stirs around the throat chakra, suggesting a need for clarity and expression.`;
     chakra = 'throat chakra';
     genZVibe = 'giving side-eye, slightly off-brand vibes.';
+    multilingualFlair = 'Clouded by vishadam, उदासी, and chali energy.';
   } else {
     color = 'black';
     description = `A shadowy ${color} aura envelops ${username}, thick with karmic-debt and lower-vibration energy. It swirls chaotically around the root chakra, craving a spiritual cleanse.`;
     chakra = 'root chakra';
     genZVibe = 'big-yikes energy, total vibe-killer.';
+    multilingualFlair = 'Heavy with veruppu, नफरत, and thallu vibes.';
   }
 
   return {
     embed: {
       title: `${username}'s Aura Visualization 🌌`,
-      description: `${description}\n\n**Chakra Alignment**: ${chakra}\n**Gen Z Vibe**: ${genZVibe}`,
+      description: `${description}\n\n**Chakra Alignment**: ${chakra}\n**Gen Z Vibe**: ${genZVibe}\n**Multilingual Vibe**: ${multilingualFlair}`,
       color: getEmbedColor(color),
       timestamp: new Date()
     }
