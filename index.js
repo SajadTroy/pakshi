@@ -585,28 +585,39 @@ client.on('messageCreate', async (message) => {
         }
 
         const post = posts[index - 1];
+        let description = post.content;
+
+        console.log(`[DEBUG] Post attachments: ${JSON.stringify(post.attachments)}`);
+
         const embed = new EmbedBuilder()
             .setAuthor({ name: target.tag, iconURL: target.displayAvatarURL() })
-            .setDescription(post.content)
+            .setDescription(description)
             .setColor('#0099ff')
             .setTimestamp(post.createdAt)
             .setFooter({ text: `Post #${index} | Likes: ${post.likes} | Dislikes: ${post.dislikes} | Post ID: ${post._id}` });
 
+        // Handle attachments
         if (post.attachments.length > 0) {
-            const firstImage = post.attachments.find((url) =>
-                ALLOWED_IMAGE_TYPES.some((type) => url.includes(type.split('/')[1]))
-            );
+            const firstImage = post.attachments.find((att) => ALLOWED_IMAGE_TYPES.includes(att.contentType));
             if (firstImage) {
-                embed.setImage(firstImage);
-                console.log(`[DEBUG] Added image to userpost embed: ${firstImage}`);
+                embed.setImage(firstImage.url);
+                console.log(`[DEBUG] Added image to userpost embed: ${firstImage.url}`);
+            } else {
+                console.log('[DEBUG] No image detected in attachments');
             }
             const videoLinks = post.attachments
-                .filter((url) => ALLOWED_VIDEO_TYPES.some((type) => url.includes(type.split('/')[1])))
-                .map((url) => `[Video](${url})`)
+                .filter((att) => ALLOWED_VIDEO_TYPES.includes(att.contentType))
+                .map((att) => `[Video](${att.url})`)
                 .join(', ');
             if (videoLinks) {
-                embed.setDescription(`${post.content}\n\n**Attachments**: ${videoLinks}`);
+                description += `\n\n**Attachments**: ${videoLinks}`;
+                embed.setDescription(description);
+                console.log(`[DEBUG] Added video links to description: ${videoLinks}`);
+            } else {
+                console.log('[DEBUG] No video links detected');
             }
+        } else {
+            console.log('[DEBUG] No attachments for this post');
         }
 
         try {
@@ -617,7 +628,6 @@ client.on('messageCreate', async (message) => {
             return message.reply('Error displaying user post.');
         }
     }
-
     // Delete Profile Command
     // if (command === 'deleteprofile') {
     //     await Profile.deleteOne({ userId: message.author.id });
