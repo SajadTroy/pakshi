@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
 const mongoose = require('mongoose');
 const Sentiment = require('sentiment');
 const User = require('./models/User');
@@ -18,6 +18,67 @@ const client = new Client({
 mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error('MongoDB connection error:', err));
+
+// Slash command collection
+client.commands = new Map();
+
+// Define /help slash command
+const helpCommand = new SlashCommandBuilder()
+  .setName('help')
+  .setDescription('Learn how to use the Aura Bot and its commands.');
+
+client.commands.set(helpCommand.name, {
+  data: helpCommand,
+  async execute(interaction) {
+    const embed = new EmbedBuilder()
+      .setTitle('🌌 Aura Bot Help')
+      .setDescription(
+        'The Aura Bot calculates and visualizes your spiritual and Gen Z aura based on your chat messages in English, Malayalam, Manglish, and Hindi. Your aura reflects your vibe, personality, and energy, stored as aura points (-100 to +100).'
+      )
+      .addFields(
+        {
+          name: 'Commands',
+          value: `
+            **/help** - Show this help message.
+            **;aura @user** - Check a user's aura points and vibe (e.g., ;aura @JohnDoe).
+            **;visualize @user** - Visualize a user's aura with chakra alignment and multilingual flair (e.g., ;visualize @JohnDoe).
+          `
+        },
+        {
+          name: 'How Aura Works',
+          value: 'Aura points are calculated from your messages using sentiment analysis and keywords (e.g., "santhosham," "खुशी," "vibe-check"). Positive words (+15 points) and negative words (-15 points) shape your aura, smoothed over time.'
+        },
+        {
+          name: 'Visualization',
+          value: 'The ;visualize command describes your aura as a glowing energy field, tied to a chakra (e.g., crown for positive vibes, root for negative). It includes Gen Z slang and multilingual vibes (e.g., "poli," "mast").'
+        },
+        {
+          name: 'Languages Supported',
+          value: 'English, Malayalam (സന്തോഷം), Manglish (santhosham), Hindi (खुशी). Use spiritual or Gen Z terms to influence your aura!'
+        }
+      )
+      .setColor(0x00B7EB)
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [embed] });
+  }
+});
+
+// Register slash commands
+const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+
+async function registerSlashCommands() {
+  try {
+    console.log('Registering slash commands...');
+    await rest.put(
+      Routes.applicationCommands(process.env.CLIENT_ID), // Global commands
+      { body: [helpCommand.toJSON()] }
+    );
+    console.log('Slash commands registered successfully.');
+  } catch (error) {
+    console.error('Error registering slash commands:', error);
+  }
+}
 
 // Aura calculation function with multilingual keywords
 function calculateSpiritualAuraPoints(text) {
@@ -196,12 +257,28 @@ function getEmbedColor(auraColor) {
   return colorMap[auraColor] || 0x00B7EB; // Default to blue
 }
 
-// Bot ready event
-client.once('ready', () => {
+// Bot ready event: Register slash commands
+client.once('ready', async () => {
   console.log(`Logged in as ${client.user.tag}`);
+  await registerSlashCommands();
 });
 
-// Message event: Process aura for non-command messages and handle commands
+// Interaction event: Handle slash commands
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
+  const command = client.commands.get(interaction.commandName);
+  if (!command) return;
+
+  try {
+    await command.execute(interaction);
+  } catch (error) {
+    console.error('Error executing slash command:', error);
+    await interaction.reply({ content: 'An error occurred while executing the command.', ephemeral: true });
+  }
+});
+
+// Message event: Process aura for non-command messages and handle prefix commands
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.content) return; // Ignore bots and empty messages
 
