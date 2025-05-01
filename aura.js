@@ -29,26 +29,39 @@ function calculateSpiritualAuraPoints(text) {
   const result = sentiment.analyze(text);
   const sentimentScore = result.score;
 
-  // Expanded spiritual and Gen Z aura keywords
+  // Expanded spiritual and Gen Z aura keywords with niche terms
   const positiveAuraWords = [
     // Spiritual positive terms
     'joy', 'love', 'compassion', 'kindness', 'peace', 'gratitude', 'healing', 'light', 'blessing', 'hope',
     'serenity', 'divine', 'harmony', 'wisdom', 'empathy', 'grace', 'radiance', 'tranquility', 'unity', 'forgiveness',
     'inspiration', 'clarity', 'purity', 'zen', 'soulful', 'uplifting', 'sacred', 'bliss', 'devotion', 'awe',
+    // Niche spiritual terms
+    'chakra', 'cosmic', 'kundalini', 'aura', 'enlightenment', 'ascension', 'vibration', 'starseed', 'manifest', 'aligned',
+    'third-eye', 'satori', 'nirvana', 'prana', 'shakti', 'etheric', 'astral', 'divinity', 'samadhi', 'lightworker',
+    'kismet', 'synchronicity', 'arcane', 'mystic', 'esoteric',
     // Gen Z positive slang
     'slay', 'vibes', 'iconic', 'real', 'authentic', 'queen', 'king', 'stan', 'inspo', 'bussin',
     'fire', 'lit', 'goat', 'legend', 'vibe', 'glow', 'energy', 'main-character', 'pop-off', 'bet',
-    'fam', 'hype', 'drip', 'snack', 'yass', 'secure-the-bag', 'on-fleek', 'extra', 'thriving', 'w'
+    'fam', 'hype', 'drip', 'snack', 'yass', 'secure-the-bag', 'on-fleek', 'extra', 'thriving', 'w',
+    // Niche Gen Z slang
+    'sksksk', 'periodt', 'vibe-check', 'and-i-oop', 'tea', 'serving', 'looks', 'snatched', 'big-yikes', 'slaps',
+    'no-skip', 'giving-life', 'mood', 'aesthetic', 'lowkey-w', 'highkey-iconic', 'bop', 'it-hits-different', 'chef-kiss', 'sheesh'
   ];
   const negativeAuraWords = [
     // Spiritual negative terms
     'hate', 'anger', 'fear', 'sadness', 'toxic', 'dark', 'curse', 'jealousy', 'resentment', 'pain',
     'malice', 'dread', 'spite', 'grudge', 'sorrow', 'despair', 'negativity', 'bitterness', 'torment', 'envy',
     'chaos', 'disharmony', 'anguish', 'vile', 'gloom', 'misery', 'wrath', 'deceit', 'suffering', 'doom',
+    // Niche spiritual terms
+    'stagnation', 'karmic-debt', 'shadow', 'blockage', 'lower-vibration', 'discord', 'hex', 'jinx', 'malevolent', 'haunted',
+    'eclipsed', 'astral-trap', 'soul-drain', 'void', 'dissonance', 'baneful', 'obscured', 'tainted', 'unaligned', 'cursed',
     // Gen Z negative slang
     'cringe', 'fake', 'shady', 'sus', 'drama', 'messy', 'mid', 'clout-chaser', 'flop', 'basic',
     'salty', 'pressed', 'lame', 'ratio', 'cap', 'no-cap', 'ghosted', 'canceled', 'tea-spiller', 'try-hard',
-    'extra-in-a-bad-way', 'lowkey-toxic', 'vibe-killer', 'problematic', 'red-flag', 'ick', 'overrated', 'done'
+    'extra-in-a-bad-way', 'lowkey-toxic', 'vibe-killer', 'problematic', 'red-flag', 'ick', 'overrated', 'done',
+    // Niche Gen Z slang
+    'oop', 'flopped', 'giving-ick', 'big-yikes', 'tea-spilled', 'ratioed', 'delulu', 'situationship', 'fumbled', 'zesty',
+    'unserious', 'not-the-vibe', 'off-brand', 'giving-side-eye', 'cooked', 'out-of-pocket', 'no-maam', 'left-on-read', 'tragic', 'skipped'
   ];
 
   // Count aura-related words
