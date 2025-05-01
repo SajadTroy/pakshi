@@ -9,7 +9,7 @@ const postSchema = new mongoose.Schema({
   dislikes: { type: Number, default: 0 }, 
   dislikers: [{ type: String }], 
   hashtags: [{ type: String }], 
-  attachments: [{ type: String }],
+  attachments: [{ url: String, contentType: String }],
 });
 
 module.exports = mongoose.model('Post', postSchema);
