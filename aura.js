@@ -19,7 +19,7 @@ mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTop
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error('MongoDB connection error:', err));
 
-// Aura calculation function
+// Aura calculation function with niche keywords
 function calculateSpiritualAuraPoints(text) {
   if (!text || typeof text !== 'string' || text.trim() === '') {
     return 0; // Neutral aura for empty/invalid input
@@ -82,12 +82,65 @@ function calculateSpiritualAuraPoints(text) {
   return auraPoints;
 }
 
+// Aura visualization function
+function visualizeAura(auraPoints, username) {
+  let color, description, chakra, genZVibe;
+
+  if (auraPoints > 50) {
+    color = 'golden';
+    description = `A radiant ${color} aura pulses around ${username}, shimmering with cosmic vibrations and high-vibrational energy. It flows like a divine light, emanating from the crown chakra, filled with starseed essence and pure bliss.`;
+    chakra = 'crown chakra';
+    genZVibe = 'main-character energy, serving highkey-iconic looks!';
+  } else if (auraPoints > 0) {
+    color = 'blue';
+    description = `A soothing ${color} aura surrounds ${username}, rippling with tranquility and empathic waves. It glows softly from the third-eye chakra, carrying a serene, uplifting vibration.`;
+    chakra = 'third-eye chakra';
+    genZVibe = 'vibe-check passed, giving aesthetic and soulful energy!';
+  } else if (auraPoints === 0) {
+    color = 'white';
+    description = `A neutral ${color} aura encircles ${username}, a balanced energy field with subtle etheric swirls. It resonates from the heart chakra, reflecting a calm, unaligned state.`;
+    chakra = 'heart chakra';
+    genZVibe = 'lowkey chill, just existing with no drama.';
+  } else if (auraPoints > -50) {
+    color = 'grey';
+    description = `A misty ${color} aura clings to ${username}, heavy with unaligned vibrations and faint dissonance. It stirs around the throat chakra, suggesting a need for clarity and expression.`;
+    chakra = 'throat chakra';
+    genZVibe = 'giving side-eye, slightly off-brand vibes.';
+  } else {
+    color = 'black';
+    description = `A shadowy ${color} aura envelops ${username}, thick with karmic-debt and lower-vibration energy. It swirls chaotically around the root chakra, craving a spiritual cleanse.`;
+    chakra = 'root chakra';
+    genZVibe = 'big-yikes energy, total vibe-killer.';
+  }
+
+  return {
+    embed: {
+      title: `${username}'s Aura Visualization 🌌`,
+      description: `${description}\n\n**Chakra Alignment**: ${chakra}\n**Gen Z Vibe**: ${genZVibe}`,
+      color: getEmbedColor(color),
+      timestamp: new Date()
+    }
+  };
+}
+
+// Helper function to assign Discord embed colors
+function getEmbedColor(auraColor) {
+  const colorMap = {
+    golden: 0xFFD700, // Gold
+    blue: 0x00B7EB, // Sky Blue
+    white: 0xFFFFFF, // White
+    grey: 0x808080, // Grey
+    black: 0x2F3136 // Dark (Discord dark theme)
+  };
+  return colorMap[auraColor] || 0x00B7EB; // Default to blue
+}
+
 // Bot ready event
 client.once('ready', () => {
   console.log(`Logged in as ${client.user.tag}`);
 });
 
-// Message event: Process aura for non-command messages and handle ;aura command
+// Message event: Process aura for non-command messages and handle commands
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.content) return; // Ignore bots and empty messages
 
@@ -134,13 +187,44 @@ client.on('messageCreate', async (message) => {
         auraDescription = 'Radiates negative energy (toxic, dark)';
       }
 
-      message.reply(
-        `**${targetUser.username}'s Aura**\n` +
-        `Aura Points: ${targetUserData.auraPoints}\n` +
-        `Vibe: ${auraDescription}\n` +
-        `Messages Analyzed: ${targetUserData.messageCount}`
-      );
-      return; // Skip aura analysis for ;aura command
+      message.reply({
+        embeds: [{
+          title: `${targetUser.username}'s Aura Stats ✨`,
+          description: `**Aura Points**: ${targetUserData.auraPoints}\n**Vibe**: ${auraDescription}\n**Messages Analyzed**: ${targetUserData.messageCount}`,
+          color: 0x00B7EB, // Blue
+          timestamp: new Date()
+        }]
+      });
+      return; // Skip aura analysis
+    }
+
+    // Handle ;visualize command
+    if (text.startsWith(';visualize')) {
+      const args = text.split(' ').slice(1);
+      let targetUser;
+
+      if (args.length === 0) {
+        targetUser = message.author; // Default to message author
+      } else {
+        const userMention = args[0].match(/^<@!?(\d+)>$/);
+        if (!userMention) {
+          return message.reply('Please mention a valid user (e.g., ;visualize @user).');
+        }
+        targetUser = await message.guild.members.fetch(userMention[1]).catch(() => null);
+        if (!targetUser) {
+          return message.reply('User not found in this server.');
+        }
+        targetUser = targetUser.user;
+      }
+
+      const targetUserData = await User.findOne({ userId: targetUser.id });
+      if (!targetUserData || targetUserData.messageCount === 0) {
+        return message.reply(`${targetUser.username} has no recorded aura yet.`);
+      }
+
+      const visualization = visualizeAura(targetUserData.auraPoints, targetUser.username);
+      message.reply({ embeds: [visualization.embed] });
+      return; // Skip aura analysis
     }
 
     // Process aura for non-command messages
