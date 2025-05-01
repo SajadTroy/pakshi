@@ -348,76 +348,47 @@ client.on('messageCreate', async (message) => {
         console.log(`[DEBUG] Search results displayed for #${tag}`);
     }
 
-    // Feed Command
+    // Feed Command (Your Followed Users, One Post per Page)
     if (command === 'feed') {
         const followedUsers = await Follower.find({ followerId: message.author.id }).select('followingId');
-        const posts = await Post.find({ userId: { $in: followedUsers.map(f => f.followingId) } })
-            .sort({ createdAt: -1 })
-            .limit(10);
-        if (!posts.length) {
+        const totalPosts = await Post.countDocuments({ userId: { $in: followedUsers.map((f) => f.followingId) } });
+        if (totalPosts === 0) {
             console.log(`[DEBUG] No feed posts for ${message.author.tag}`);
             return message.reply('No posts from followed users.');
         }
 
-        const embed = new EmbedBuilder().setTitle('Your Feed').setColor('#0099ff');
-        for (const post of posts) {
-            const tag = await getUserTag(post.userId);
-            embed.addFields({ name: tag, value: post.content, inline: false });
-        }
-
-        message.channel.send({ embeds: [embed] });
-        console.log(`[DEBUG] Feed displayed for ${message.author.tag}`);
-    }
-
-    // User Feed Command (Specific User's Posts)
-    if (command === 'userfeed') {
-        const target = message.mentions.users.first();
-        if (!target) {
-            console.log('[DEBUG] No target mentioned for userfeed');
-            return message.reply('Please mention a user to view their feed! (e.g., `;userfeed @friend`)');
-        }
-
         let page = 0;
-        const totalPosts = await Post.countDocuments({ userId: target.id });
-        const totalPages = Math.ceil(totalPosts / POSTS_PER_PAGE);
-
-        if (totalPosts === 0) {
-            console.log(`[DEBUG] No posts found for user ${target.tag}`);
-            return message.reply(`${target.tag} has no posts.`);
-        }
-
         async function sendFeedPage(pageNum) {
-            const posts = await Post.find({ userId: target.id })
+            const posts = await Post.find({ userId: { $in: followedUsers.map((f) => f.followingId) } })
                 .sort({ createdAt: -1 })
-                .skip(pageNum * POSTS_PER_PAGE)
-                .limit(POSTS_PER_PAGE);
+                .skip(pageNum)
+                .limit(1);
+
+            const post = posts[0];
+            const userTag = await getUserTag(post.userId);
+            let description = post.content;
+            if (post.attachments.length > 0) {
+                const image = post.attachments.find((url) => ALLOWED_IMAGE_TYPES.some((type) => url.includes(type.split('/')[1])));
+                if (image) {
+                    embed.setImage(image);
+                    console.log(`[DEBUG] Added image to feed embed: ${image}`);
+                }
+                const videoLinks = post.attachments
+                    .filter((url) => ALLOWED_VIDEO_TYPES.some((type) => url.includes(type.split('/')[1])))
+                    .map((url) => `[Video](${url})`)
+                    .join(', ');
+                if (videoLinks) {
+                    description += `\n\n**Attachments**: ${videoLinks}`;
+                }
+            }
 
             const embed = new EmbedBuilder()
-                .setTitle(`${target.tag}'s Feed (Page ${pageNum + 1}/${totalPages})`)
-                .setColor('#0099ff');
-
-            for (const [index, post] of posts.entries()) {
-                let description = post.content;
-                if (post.attachments.length > 0) {
-                    const image = post.attachments.find((url) => ALLOWED_IMAGE_TYPES.some((type) => url.includes(type.split('/')[1])));
-                    if (image && index === 0) {
-                        embed.setImage(image); // Only set image for the first post
-                        console.log(`[DEBUG] Added image to userfeed embed: ${image}`);
-                    }
-                    const videoLinks = post.attachments
-                        .filter((url) => ALLOWED_VIDEO_TYPES.some((type) => url.includes(type.split('/')[1])))
-                        .map((url) => `[Video](${url})`)
-                        .join(', ');
-                    if (videoLinks) {
-                        description += `\n\n**Attachments**: ${videoLinks}`;
-                    }
-                }
-                embed.addFields({
-                    name: `Post #${pageNum * POSTS_PER_PAGE + index + 1} (Posted on ${post.createdAt.toLocaleDateString()})`,
-                    value: description,
-                    inline: false,
-                });
-            }
+                .setTitle(`Your Feed (Post ${pageNum + 1}/${totalPosts})`)
+                .setAuthor({ name: userTag, iconURL: (await client.users.fetch(post.userId)).displayAvatarURL() })
+                .setDescription(description)
+                .setColor('#0099ff')
+                .setTimestamp(post.createdAt)
+                .setFooter({ text: `Likes: ${post.likes} | Dislikes: ${post.dislikes} | Post ID: ${post._id}` });
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
@@ -429,18 +400,20 @@ client.on('messageCreate', async (message) => {
                     .setCustomId('next_page')
                     .setLabel('Next')
                     .setStyle(ButtonStyle.Primary)
-                    .setDisabled(pageNum === totalPages - 1)
+                    .setDisabled(pageNum === totalPosts - 1)
             );
 
-            return { embed, row };
+            return { embed, row, post };
         }
 
         try {
-            const { embed, row } = await sendFeedPage(page);
+            const { embed, row, post } = await sendFeedPage(page);
             const feedMessage = await message.channel.send({ embeds: [embed], components: [row] });
-            console.log(`[DEBUG] User feed displayed for ${target.tag} by ${message.author.tag}, page ${page + 1}`);
+            await feedMessage.react('❤️');
+            await feedMessage.react('👎');
+            console.log(`[DEBUG] Feed displayed for ${message.author.tag}, post ${page + 1}/${totalPosts}`);
 
-            const collector = feedMessage.createMessageComponentCollector({ time: 60000 }); // 1 minute
+            const collector = feedMessage.createMessageComponentCollector({ time: 60000 });
             collector.on('collect', async (interaction) => {
                 if (interaction.user.id !== message.author.id) {
                     return interaction.reply({ content: 'Only the command issuer can use these buttons!', ephemeral: true });
@@ -448,17 +421,113 @@ client.on('messageCreate', async (message) => {
 
                 if (interaction.customId === 'prev_page' && page > 0) {
                     page--;
-                } else if (interaction.customId === 'next_page' && page < totalPages - 1) {
+                } else if (interaction.customId === 'next_page' && page < totalPosts - 1) {
                     page++;
                 }
 
                 const { embed: updatedEmbed, row: updatedRow } = await sendFeedPage(page);
                 await interaction.update({ embeds: [updatedEmbed], components: [updatedRow] });
-                console.log(`[DEBUG] Updated user feed to page ${page + 1} for ${target.tag}`);
+                console.log(`[DEBUG] Updated feed to post ${page + 1}/${totalPosts} for ${message.author.tag}`);
             });
 
             collector.on('end', () => {
-                feedMessage.edit({ components: [] }); // Remove buttons after timeout
+                feedMessage.edit({ components: [] });
+                console.log(`[DEBUG] Feed collector ended for ${message.author.tag}`);
+            });
+        } catch (err) {
+            console.error(`[ERROR] Failed to send feed: ${err.message}`);
+            message.reply('Error displaying feed.');
+        }
+    }
+
+    // User Feed Command (Specific User's Posts, One Post per Page)
+    if (command === 'userfeed') {
+        const target = message.mentions.users.first();
+        if (!target) {
+            console.log('[DEBUG] No target mentioned for userfeed');
+            return message.reply('Please mention a user to view their feed! (e.g., `;userfeed @friend`)');
+        }
+
+        const totalPosts = await Post.countDocuments({ userId: target.id });
+        if (totalPosts === 0) {
+            console.log(`[DEBUG] No posts found for user ${target.tag}`);
+            return message.reply(`${target.tag} has no posts.`);
+        }
+
+        let page = 0;
+        async function sendFeedPage(pageNum) {
+            const posts = await Post.find({ userId: target.id })
+                .sort({ createdAt: -1 })
+                .skip(pageNum)
+                .limit(1);
+
+            const post = posts[0];
+            let description = post.content;
+            if (post.attachments.length > 0) {
+                const image = post.attachments.find((url) => ALLOWED_IMAGE_TYPES.some((type) => url.includes(type.split('/')[1])));
+                if (image) {
+                    embed.setImage(image);
+                    console.log(`[DEBUG] Added image to userfeed embed: ${image}`);
+                }
+                const videoLinks = post.attachments
+                    .filter((url) => ALLOWED_VIDEO_TYPES.some((type) => url.includes(type.split('/')[1])))
+                    .map((url) => `[Video](${url})`)
+                    .join(', ');
+                if (videoLinks) {
+                    description += `\n\n**Attachments**: ${videoLinks}`;
+                }
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle(`${target.tag}'s Feed (Post ${pageNum + 1}/${totalPosts})`)
+                .setAuthor({ name: target.tag, iconURL: target.displayAvatarURL() })
+                .setDescription(description)
+                .setColor('#0099ff')
+                .setTimestamp(post.createdAt)
+                .setFooter({ text: `Likes: ${post.likes} | Dislikes: ${post.dislikes} | Post ID: ${post._id}` });
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('prev_page')
+                    .setLabel('Previous')
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(pageNum === 0),
+                new ButtonBuilder()
+                    .setCustomId('next_page')
+                    .setLabel('Next')
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(pageNum === totalPosts - 1)
+            );
+
+            return { embed, row, post };
+        }
+
+        try {
+            const { embed, row, post } = await sendFeedPage(page);
+            const feedMessage = await message.channel.send({ embeds: [embed], components: [row] });
+            await feedMessage.react('❤️');
+            await feedMessage.react('👎');
+            console.log(`[DEBUG] User feed displayed for ${target.tag} by ${message.author.tag}, post ${page + 1}/${totalPosts}`);
+
+            const collector = feedMessage.createMessageComponentCollector({ time: 60000 });
+            collector.on('collect', async (interaction) => {
+                if (interaction.user.id !== message.author.id) {
+                    return interaction.reply({ content: 'Only the command issuer can use these buttons!', ephemeral: true });
+                }
+
+                if (interaction.customId === 'prev_page' && page > 0) {
+                    page--;
+                } else if (interaction.customId === 'next_page' && page < totalPosts - 1) {
+                    page++;
+                }
+
+                const { embed: updatedEmbed, row: updatedRow } = await sendFeedPage(page);
+                await interaction.update({ embeds: [updatedEmbed], components: [updatedRow] });
+                console.log(`[DEBUG] Updated user feed to post ${page + 1}/${totalPosts} for ${target.tag}`);
+            });
+
+            collector.on('end', () => {
+                feedMessage.edit({ components: [] });
                 console.log(`[DEBUG] User feed collector ended for ${target.tag}`);
             });
         } catch (err) {
