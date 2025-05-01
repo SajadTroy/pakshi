@@ -29,14 +29,26 @@ function calculateSpiritualAuraPoints(text) {
   const result = sentiment.analyze(text);
   const sentimentScore = result.score;
 
-  // Spiritual and Gen Z aura keywords
+  // Expanded spiritual and Gen Z aura keywords
   const positiveAuraWords = [
+    // Spiritual positive terms
     'joy', 'love', 'compassion', 'kindness', 'peace', 'gratitude', 'healing', 'light', 'blessing', 'hope',
-    'slay', 'vibes', 'iconic', 'real', 'authentic', 'queen', 'king', 'stan', 'inspo'
+    'serenity', 'divine', 'harmony', 'wisdom', 'empathy', 'grace', 'radiance', 'tranquility', 'unity', 'forgiveness',
+    'inspiration', 'clarity', 'purity', 'zen', 'soulful', 'uplifting', 'sacred', 'bliss', 'devotion', 'awe',
+    // Gen Z positive slang
+    'slay', 'vibes', 'iconic', 'real', 'authentic', 'queen', 'king', 'stan', 'inspo', 'bussin',
+    'fire', 'lit', 'goat', 'legend', 'vibe', 'glow', 'energy', 'main-character', 'pop-off', 'bet',
+    'fam', 'hype', 'drip', 'snack', 'yass', 'secure-the-bag', 'on-fleek', 'extra', 'thriving', 'w'
   ];
   const negativeAuraWords = [
+    // Spiritual negative terms
     'hate', 'anger', 'fear', 'sadness', 'toxic', 'dark', 'curse', 'jealousy', 'resentment', 'pain',
-    'cringe', 'fake', 'shady', 'sus', 'drama', 'messy'
+    'malice', 'dread', 'spite', 'grudge', 'sorrow', 'despair', 'negativity', 'bitterness', 'torment', 'envy',
+    'chaos', 'disharmony', 'anguish', 'vile', 'gloom', 'misery', 'wrath', 'deceit', 'suffering', 'doom',
+    // Gen Z negative slang
+    'cringe', 'fake', 'shady', 'sus', 'drama', 'messy', 'mid', 'clout-chaser', 'flop', 'basic',
+    'salty', 'pressed', 'lame', 'ratio', 'cap', 'no-cap', 'ghosted', 'canceled', 'tea-spiller', 'try-hard',
+    'extra-in-a-bad-way', 'lowkey-toxic', 'vibe-killer', 'problematic', 'red-flag', 'ick', 'overrated', 'done'
   ];
 
   // Count aura-related words
