@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
 const mongoose = require('mongoose');
 const Post = require('./models/Post');
 const Profile = require('./models/Profile');
@@ -20,6 +20,7 @@ const cooldowns = new Map();
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif'];
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm'];
 const MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024; // 8MB (Discord free bot limit)
+const POSTS_PER_PAGE = 10;
 
 // Connect to MongoDB
 mongoose
@@ -63,6 +64,7 @@ client.on('messageCreate', async (message) => {
     const command = args.shift().toLowerCase();
     console.log(`[DEBUG] Command: ${command}, Args: ${args.join(' ')}`);
 
+    // Help Command
     if (command === 'help') {
         const embed = new EmbedBuilder()
             .setTitle('📜 PakshiBot Help')
@@ -71,7 +73,8 @@ client.on('messageCreate', async (message) => {
             .addFields(
                 {
                     name: ';post [message]',
-                    value: 'Create a post with optional hashtags and attachments (images: PNG/JPG/GIF, videos: MP4/WEBM, e.g., `;post Hello #world` with an image). Others can like (❤️) or dislike (👎) it.',
+                    value:
+                        'Create a post with optional hashtags and attachments (images: PNG/JPG/GIF, videos: MP4/WEBM, e.g., `;post Hello #world` with an image). Others can like (❤️) or dislike (👎) it.',
                     inline: false,
                 },
                 {
@@ -99,10 +102,20 @@ client.on('messageCreate', async (message) => {
                     value: 'View recent posts from users you follow.',
                     inline: false,
                 },
+                {
+                    name: ';userfeed [@user]',
+                    value: 'View recent posts by a specific user with pagination (e.g., `;userfeed @friend`).',
+                    inline: false,
+                },
+                {
+                    name: ';userpost [@user] [number]',
+                    value: 'View a specific post by a user (e.g., `;userpost @friend 3` for their 3rd most recent post).',
+                    inline: false,
+                },
                 // {
-                //     name: ';deleteprofile',
-                //     value: 'Delete your profile, posts, and follow data.',
-                //     inline: false,
+                //   name: ';deleteprofile',
+                //   value: 'Delete your profile, posts, and follow data.',
+                //   inline: false,
                 // },
                 {
                     name: ';help',
@@ -113,8 +126,13 @@ client.on('messageCreate', async (message) => {
             .setFooter({ text: `Prefix: ${PREFIX} | Made with ❤️ by PakshiBot` })
             .setTimestamp();
 
-        await message.channel.send({ embeds: [embed] });
-        console.log(`[DEBUG] Help command executed for ${message.author.tag}`);
+        try {
+            await message.channel.send({ embeds: [embed] });
+            console.log(`[DEBUG] Help command executed for ${message.author.tag}`);
+        } catch (err) {
+            console.error(`[ERROR] Failed to send help: ${err.message}`);
+            message.reply('Error displaying help.');
+        }
         return;
     }
 
@@ -349,6 +367,163 @@ client.on('messageCreate', async (message) => {
 
         message.channel.send({ embeds: [embed] });
         console.log(`[DEBUG] Feed displayed for ${message.author.tag}`);
+    }
+
+    // User Feed Command (Specific User's Posts)
+    if (command === 'userfeed') {
+        const target = message.mentions.users.first();
+        if (!target) {
+            console.log('[DEBUG] No target mentioned for userfeed');
+            return message.reply('Please mention a user to view their feed! (e.g., `;userfeed @friend`)');
+        }
+
+        let page = 0;
+        const totalPosts = await Post.countDocuments({ userId: target.id });
+        const totalPages = Math.ceil(totalPosts / POSTS_PER_PAGE);
+
+        if (totalPosts === 0) {
+            console.log(`[DEBUG] No posts found for user ${target.tag}`);
+            return message.reply(`${target.tag} has no posts.`);
+        }
+
+        async function sendFeedPage(pageNum) {
+            const posts = await Post.find({ userId: target.id })
+                .sort({ createdAt: -1 })
+                .skip(pageNum * POSTS_PER_PAGE)
+                .limit(POSTS_PER_PAGE);
+
+            const embed = new EmbedBuilder()
+                .setTitle(`${target.tag}'s Feed (Page ${pageNum + 1}/${totalPages})`)
+                .setColor('#0099ff');
+
+            for (const [index, post] of posts.entries()) {
+                let description = post.content;
+                if (post.attachments.length > 0) {
+                    const image = post.attachments.find((url) => ALLOWED_IMAGE_TYPES.some((type) => url.includes(type.split('/')[1])));
+                    if (image && index === 0) {
+                        embed.setImage(image); // Only set image for the first post
+                        console.log(`[DEBUG] Added image to userfeed embed: ${image}`);
+                    }
+                    const videoLinks = post.attachments
+                        .filter((url) => ALLOWED_VIDEO_TYPES.some((type) => url.includes(type.split('/')[1])))
+                        .map((url) => `[Video](${url})`)
+                        .join(', ');
+                    if (videoLinks) {
+                        description += `\n\n**Attachments**: ${videoLinks}`;
+                    }
+                }
+                embed.addFields({
+                    name: `Post #${pageNum * POSTS_PER_PAGE + index + 1} (Posted on ${post.createdAt.toLocaleDateString()})`,
+                    value: description,
+                    inline: false,
+                });
+            }
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('prev_page')
+                    .setLabel('Previous')
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(pageNum === 0),
+                new ButtonBuilder()
+                    .setCustomId('next_page')
+                    .setLabel('Next')
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(pageNum === totalPages - 1)
+            );
+
+            return { embed, row };
+        }
+
+        try {
+            const { embed, row } = await sendFeedPage(page);
+            const feedMessage = await message.channel.send({ embeds: [embed], components: [row] });
+            console.log(`[DEBUG] User feed displayed for ${target.tag} by ${message.author.tag}, page ${page + 1}`);
+
+            const collector = feedMessage.createMessageComponentCollector({ time: 60000 }); // 1 minute
+            collector.on('collect', async (interaction) => {
+                if (interaction.user.id !== message.author.id) {
+                    return interaction.reply({ content: 'Only the command issuer can use these buttons!', ephemeral: true });
+                }
+
+                if (interaction.customId === 'prev_page' && page > 0) {
+                    page--;
+                } else if (interaction.customId === 'next_page' && page < totalPages - 1) {
+                    page++;
+                }
+
+                const { embed: updatedEmbed, row: updatedRow } = await sendFeedPage(page);
+                await interaction.update({ embeds: [updatedEmbed], components: [updatedRow] });
+                console.log(`[DEBUG] Updated user feed to page ${page + 1} for ${target.tag}`);
+            });
+
+            collector.on('end', () => {
+                feedMessage.edit({ components: [] }); // Remove buttons after timeout
+                console.log(`[DEBUG] User feed collector ended for ${target.tag}`);
+            });
+        } catch (err) {
+            console.error(`[ERROR] Failed to send user feed: ${err.message}`);
+            message.reply('Error displaying user feed.');
+        }
+    }
+
+    // User Post Command (Specific Post by Index)
+    if (command === 'userpost') {
+        const target = message.mentions.users.first();
+        if (!target) {
+            console.log('[DEBUG] No target mentioned for userpost');
+            return message.reply('Please mention a user! (e.g., `;userpost @friend 3`)');
+        }
+
+        const index = parseInt(args[1], 10);
+        if (isNaN(index) || index < 1) {
+            console.log('[DEBUG] Invalid or missing post index for userpost');
+            return message.reply('Please provide a valid post number! (e.g., `;userpost @friend 3`)');
+        }
+
+        const posts = await Post.find({ userId: target.id }).sort({ createdAt: -1 });
+        if (posts.length === 0) {
+            console.log(`[DEBUG] No posts found for user ${target.tag}`);
+            return message.reply(`${target.tag} has no posts.`);
+        }
+
+        if (index > posts.length) {
+            console.log(`[DEBUG] Post index ${index} out of range for ${target.tag}`);
+            return message.reply(`${target.tag} only has ${posts.length} post(s).`);
+        }
+
+        const post = posts[index - 1];
+        const embed = new EmbedBuilder()
+            .setAuthor({ name: target.tag, iconURL: target.displayAvatarURL() })
+            .setDescription(post.content)
+            .setColor('#0099ff')
+            .setTimestamp(post.createdAt)
+            .setFooter({ text: `Post #${index} | Likes: ${post.likes} | Dislikes: ${post.dislikes} | Post ID: ${post._id}` });
+
+        if (post.attachments.length > 0) {
+            const firstImage = post.attachments.find((url) =>
+                ALLOWED_IMAGE_TYPES.some((type) => url.includes(type.split('/')[1]))
+            );
+            if (firstImage) {
+                embed.setImage(firstImage);
+                console.log(`[DEBUG] Added image to userpost embed: ${firstImage}`);
+            }
+            const videoLinks = post.attachments
+                .filter((url) => ALLOWED_VIDEO_TYPES.some((type) => url.includes(type.split('/')[1])))
+                .map((url) => `[Video](${url})`)
+                .join(', ');
+            if (videoLinks) {
+                embed.setDescription(`${post.content}\n\n**Attachments**: ${videoLinks}`);
+            }
+        }
+
+        try {
+            await message.channel.send({ embeds: [embed] });
+            console.log(`[DEBUG] User post #${index} displayed for ${target.tag} by ${message.author.tag}`);
+        } catch (err) {
+            console.error(`[ERROR] Failed to send user post: ${err.message}`);
+            return message.reply('Error displaying user post.');
+        }
     }
 
     // Delete Profile Command
