@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, ActivityType } = require('discord.js');
 const mongoose = require('mongoose');
 const Sentiment = require('sentiment');
 const User = require('./models/User');
@@ -257,10 +257,16 @@ function getEmbedColor(auraColor) {
   return colorMap[auraColor] || 0x00B7EB; // Default to blue
 }
 
-// Bot ready event: Register slash commands
+// Bot ready event: Register slash commands and set status
 client.once('ready', async () => {
   console.log(`Logged in as ${client.user.tag}`);
   await registerSlashCommands();
+
+  // Set bot status to "Watching Aura"
+  client.user.setPresence({
+    activities: [{ name: 'Aura', type: ActivityType.Watching }],
+    status: 'online'
+  });
 });
 
 // Interaction event: Handle slash commands
