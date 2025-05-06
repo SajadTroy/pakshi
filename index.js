@@ -1,706 +1,405 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, ActivityType } = require('discord.js');
 const mongoose = require('mongoose');
-const Post = require('./models/Post');
-const Profile = require('./models/Profile');
-const Follower = require('./models/Follower');
+const Sentiment = require('sentiment');
+const User = require('./models/User');
 
+// Initialize Discord client with necessary intents
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.GuildMessageReactions,
-        GatewayIntentBits.DirectMessages,
-        GatewayIntentBits.MessageContent,
-    ],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
+  ]
 });
-
-const PREFIX = ';';
-const cooldowns = new Map();
-const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif'];
-const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm'];
-const MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024; // 8MB (Discord free bot limit)
-const POSTS_PER_PAGE = 10;
 
 // Connect to MongoDB
-mongoose
-    .connect(process.env.MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-    })
-    .then(() => console.log('[INFO] Connected to MongoDB'))
-    .catch((err) => console.error('[ERROR] MongoDB connection error:', err));
+mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log('Connected to MongoDB'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
-client.on('ready', () => {
-    console.log(`[INFO] Logged in as ${client.user.tag}!`);
-    console.log(`[INFO] Bot is in ${client.guilds.cache.size} guilds`);
+// Slash command collection
+client.commands = new Map();
+
+// Define /help slash command
+const helpCommand = new SlashCommandBuilder()
+  .setName('help')
+  .setDescription('Learn how to use the Aura Bot and its commands.');
+
+client.commands.set(helpCommand.name, {
+  data: helpCommand,
+  async execute(interaction) {
+    const embed = new EmbedBuilder()
+      .setTitle('🌌 Aura Bot Help')
+      .setDescription(
+        'The Aura Bot calculates and visualizes your spiritual and Gen Z aura based on your chat messages in English, Malayalam, Manglish, and Hindi. Your aura reflects your vibe, personality, and energy, stored as aura points (-100 to +100).'
+      )
+      .addFields(
+        {
+          name: 'Commands',
+          value: `
+            **/help** - Show this help message.
+            **;aura @user** - Check a user's aura points and vibe (e.g., ;aura @JohnDoe).
+            **;visualize @user** - Visualize a user's aura with chakra alignment and multilingual flair (e.g., ;visualize @JohnDoe).
+          `
+        },
+        {
+          name: 'How Aura Works',
+          value: 'Aura points are calculated from your messages using sentiment analysis and keywords (e.g., "santhosham," "खुशी," "vibe-check"). Positive words (+15 points) and negative words (-15 points) shape your aura, smoothed over time.'
+        },
+        {
+          name: 'Visualization',
+          value: 'The ;visualize command describes your aura as a glowing energy field, tied to a chakra (e.g., crown for positive vibes, root for negative). It includes Gen Z slang and multilingual vibes (e.g., "poli," "mast").'
+        },
+        {
+          name: 'Languages Supported',
+          value: 'English, Malayalam (സന്തോഷം), Manglish (santhosham), Hindi (खुशी). Use spiritual or Gen Z terms to influence your aura!'
+        }
+      )
+      .setColor(0x00B7EB)
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [embed] });
+  }
 });
 
-const userCache = new Map();
-async function getUserTag(userId) {
-    if (userCache.has(userId)) return userCache.get(userId);
-    try {
-        const user = await client.users.fetch(userId);
-        userCache.set(userId, user.tag);
-        return user.tag;
-    } catch {
-        return 'Unknown User';
-    }
+// Register slash commands
+const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+
+async function registerSlashCommands() {
+  try {
+    console.log('Registering slash commands...');
+    await rest.put(
+      Routes.applicationCommands(process.env.CLIENT_ID), // Global commands
+      { body: [helpCommand.toJSON()] }
+    );
+    console.log('Slash commands registered successfully.');
+  } catch (error) {
+    console.error('Error registering slash commands:', error);
+  }
 }
 
+// Aura calculation function with multilingual keywords
+function calculateSpiritualAuraPoints(text) {
+  if (!text || typeof text !== 'string' || text.trim() === '') {
+    return 0; // Neutral aura for empty/invalid input
+  }
+
+  const sentiment = new Sentiment();
+  const result = sentiment.analyze(text);
+  const sentimentScore = result.score;
+
+  // Multilingual aura keywords (English, Malayalam, Manglish, Hindi)
+  const positiveAuraWords = [
+    // English spiritual terms
+    'joy', 'love', 'compassion', 'kindness', 'peace', 'gratitude', 'healing', 'light', 'blessing', 'hope',
+    'serenity', 'divine', 'harmony', 'wisdom', 'empathy', 'grace', 'radiance', 'tranquility', 'unity', 'forgiveness',
+    'inspiration', 'clarity', 'purity', 'zen', 'soulful', 'uplifting', 'sacred', 'bliss', 'devotion', 'awe',
+    // English niche spiritual terms
+    'chakra', 'cosmic', 'kundalini', 'aura', 'enlightenment', 'ascension', 'vibration', 'starseed', 'manifest', 'aligned',
+    'third-eye', 'satori', 'nirvana', 'prana', 'shakti', 'etheric', 'astral', 'divinity', 'samadhi', 'lightworker',
+    'kismet', 'synchronicity', 'arcane', 'mystic', 'esoteric',
+    // English Gen Z slang
+    'slay', 'vibes', 'iconic', 'real', 'authentic', 'queen', 'king', 'stan', 'inspo', 'bussin',
+    'fire', 'lit', 'goat', 'legend', 'vibe', 'glow', 'energy', 'main-character', 'pop-off', 'bet',
+    'fam', 'hype', 'drip', 'snack', 'yass', 'secure-the-bag', 'on-fleek', 'extra', 'thriving', 'w',
+    // English niche Gen Z slang
+    'sksksk', 'periodt', 'vibe-check', 'and-i-oop', 'tea', 'serving', 'looks', 'snatched', 'big-yikes', 'slaps',
+    'no-skip', 'giving-life', 'mood', 'aesthetic', 'lowkey-w', 'highkey-iconic', 'bop', 'it-hits-different', 'chef-kiss', 'sheesh',
+    // Malayalam spiritual/emotional terms
+    'സന്തോഷം', 'സ്നേഹം', 'കരുണ', 'ദയ', 'സമാധാനം', 'നന്ദി', 'രോഗശാന്തി', 'വെളിച്ചം', 'ആശീർവാദം', 'പ്രതീക്ഷ',
+    'ശാന്തി', 'ദൈവിക', 'ഐക്യം', 'ജ്ഞാനം', 'സഹാനുഭൂതി', 'കൃപ', 'തേജസ്സ്', 'നിശ്ചലത', 'ഏകത', 'ക്ഷമ',
+    'ആത്മാവ്', 'നന്മ', 'വിശുദ്ധി', 'പ്രചോദനം', 'വിമോചനം',
+    // Malayalam niche spiritual terms
+    'ചക്രം', 'ബ്രഹ്മാണ്ഡം', 'കുണ്ഡലിനി', 'ഓറ', 'മോക്ഷം', 'ആരോഹണം', 'സ്പന്ദനം', 'നക്ഷത്രബീജം', 'പ്രകടനം', 'സമന്വയം',
+    'നെറ്റിചക്രം', 'നിർവാണം', 'പ്രാണൻ', 'ശക്തി', 'നീലാകാശം', 'നക്ഷത്രലോകം', 'ദിവ്യത', 'സമാധി', 'വെളിച്ചപ്രവർത്തകൻ',
+    // Manglish spiritual/emotional terms
+    'santhosham', 'sneham', 'karuna', 'daya', 'samadhanam', 'nandi', 'rogashanthi', 'velicham', 'ashirvad', 'pratheeksha',
+    'shanthi', 'daivika', 'aikyam', 'jnanam', 'sahanubhuthi', 'kripa', 'tejas', 'nishchalatha', 'ekatha', 'kshama',
+    'athma', 'nanma', 'vishudhi', 'prachodanam', 'vimochanam',
+    // Manglish niche spiritual terms
+    'chakram', 'brahmandam', 'kundalini', 'aura', 'moksham', 'aarohanam', 'spandanam', 'nakshatrabeejam', 'praktanam', 'samanwayam',
+    'netti-chakram', 'nirvanam', 'pranan', 'shakthi', 'neelakasham', 'nakshatralokam', 'divyatha', 'samadhi', 'velichapravarthakan',
+    // Manglish Gen Z slang
+    'poli', 'vibe', 'kidu', 'mass', 'super', 'adipoli', 'thara', 'jolly', 'chumma', 'fire',
+    'litty', 'goat', 'epic', 'slay', 'onnu-onnu', 'pinnallae', 'katta', 'vibes', 'thirichu', 'nalla',
+    // Hindi spiritual/emotional terms
+    'खुशी', 'प्यार', 'करुणा', 'दया', 'शांति', 'कृतज्ञता', 'उपचार', 'प्रकाश', 'आशीर्वाद', 'आशा',
+    'शान्ति', 'दिव्य', 'एकता', 'ज्ञान', 'सहानुभूति', 'कृपा', 'तेज', 'निश्चलता', 'सामंजस्य', 'क्षमा',
+    'आत्मा', 'सद्भाव', 'पवित्रता', 'प्रेरणा', 'मुक्ति',
+    // Hindi niche spiritual terms
+    'चक्र', 'ब्रह्मांडीय', 'कुंडलिनी', 'आभा', 'मोक्ष', 'उत्थान', 'कंपन', 'नक्षत्रबीज', 'प्रकटीकरण', 'संनाद',
+    'तृतीय-नेत्र', 'निर्वाण', 'प्राण', 'शक्ति', 'आकाशीय', 'नक्षत्रलोक', 'दिव्यता', 'समाधि', 'प्रकाशकर्मी',
+    // Hindi Gen Z slang
+    'banger', 'lit', 'vibe', 'slay', 'fire', 'epic', 'boss', 'dil-se-dil', 'mast', 'jhakaas',
+    'dhamaka', 'fatafati', 'zabardast', 'killer', 'on-point', 'desi-swag', 'bawaal', 'sahi', 'full-on', 'tadka'
+  ];
+  const negativeAuraWords = [
+    // English spiritual terms
+    'hate', 'anger', 'fear', 'sadness', 'toxic', 'dark', 'curse', 'jealousy', 'resentment', 'pain',
+    'malice', 'dread', 'spite', 'grudge', 'sorrow', 'despair', 'negativity', 'bitterness', 'torment', 'envy',
+    'chaos', 'disharmony', 'anguish', 'vile', 'gloom', 'misery', 'wrath', 'deceit', 'suffering', 'doom',
+    // English niche spiritual terms
+    'stagnation', 'karmic-debt', 'shadow', 'blockage', 'lower-vibration', 'discord', 'hex', 'jinx', 'malevolent', 'haunted',
+    'eclipsed', 'astral-trap', 'soul-drain', 'void', 'dissonance', 'baneful', 'obscured', 'tainted', 'unaligned', 'cursed',
+    // English Gen Z slang
+    'cringe', 'fake', 'shady', 'sus', 'drama', 'messy', 'mid', 'clout-chaser', 'flop', 'basic',
+    'salty', 'pressed', 'lame', 'ratio', 'cap', 'no-cap', 'ghosted', 'canceled', 'tea-spiller', 'try-hard',
+    'extra-in-a-bad-way', 'lowkey-toxic', 'vibe-killer', 'problematic', 'red-flag', 'ick', 'overrated', 'done',
+    // English niche Gen Z slang
+    'oop', 'flopped', 'giving-ick', 'big-yikes', 'tea-spilled', 'ratioed', 'delulu', 'situationship', 'fumbled', 'zesty',
+    'unserious', 'not-the-vibe', 'off-brand', 'giving-side-eye', 'cooked', 'out-of-pocket', 'no-maam', 'left-on-read', 'tragic', 'skipped',
+    // Malayalam spiritual/emotional terms
+    'വെറുപ്പ്', 'ദേഷ്യം', 'ഭയം', 'വിഷാദം', 'വിഷമയം', 'ഇരുട്ട്', 'ശാപം', 'അസൂയ', 'പക', 'വേദന',
+    'ദുരുദ്ദേശ്യം', 'ഭീതി', 'നിന്ദ', 'പിണക്കം', 'ദുഃഖം', 'നിരാശ', 'നെഗറ്റിവിറ്റി', 'കയ്പ്', 'പീഡനം', 'ഈർഷ്യ',
+    'കുഴപ്പം', 'അസന്തുലിത', 'വ്യഥ', 'നീചം', 'ഗ്ലൂം', 'ദുരിതം', 'ക്രോധം', 'വഞ്ചന', 'കഷ്ടപ്പാട്', 'വിനാശം',
+    // Malayalam niche spiritual terms
+    'നിശ്ചലത', 'കർമ്മബാധ', 'നിഴൽ', 'തടസ്സം', 'താഴ്ന്ന-സ്പന്ദനം', 'വിയോജിപ്പ്', 'ശാപഗ്രസ്ത', 'ദോഷം', 'ദുഷ്ട', 'പേടിസ്വപ്നം',
+    'ഗ്രഹണം', 'നക്ഷത്ര-കെണി', 'ആത്മ-നാശം', 'ശൂന്യത', 'വിസന്തുലനം', 'നിന്ദനീയം', 'മങ്ങിയ', 'മലിനം', 'വിട്ടുപോകൽ', 'ശപിക്കപ്പെട്ട',
+    // Manglish spiritual/emotional terms
+    'veruppu', 'deshyam', 'bhayam', 'vishadam', 'vishamayam', 'iruttu', 'shapam', 'asooya', 'paka', 'vedana',
+    'duruddeshyam', 'bheethi', 'ninda', 'pinakkam', 'dukham', 'nirasha', 'negativity', 'kaipp', 'peedanam', 'irshya',
+    'kuzhappam', 'asanthulitha', 'vyatha', 'neecham', 'gloom', 'duritham', 'krodham', 'vanchanam', 'kashtapad', 'vinasham',
+    // Manglish niche spiritual terms
+    'nishchalatha', 'karmabhaada', 'nizhal', 'thadassam', 'thaazhnna-spandanam', 'viyojipp', 'shapagrasta', 'dosham', 'dushta', 'pediswapnam',
+    'grahanam', 'nakshatrakeni', 'athmanasham', 'shoonyatha', 'visanthulanam', 'nindaneeyam', 'mangiya', 'malinam', 'vittupokkal', 'shapikkapetta',
+    // Manglish Gen Z slang
+    'thallu', 'bakwas', 'cringe', 'vatt', 'drama', 'kuzhappam', 'mid', 'fake', 'shady', 'sus',
+    'chali', 'venda', 'lame', 'flop', 'bore', 'irritating', 'over', 'no-way', 'chumma-vatt', 'pottan',
+    // Hindi spiritual/emotional terms
+    'नफरत', 'गुस्सा', 'डर', 'उदासी', 'विषाक्त', 'अंधेरा', 'शाप', 'ईर्ष्या', 'द्वेष', 'दर्द',
+    'दुर्भावना', 'भय', 'निंदा', 'मनमुटाव', 'दुख', 'निराशा', 'नकारात्मकता', 'कटुता', 'यातना', 'द्वेष',
+    'अराजकता', 'असामंजस्य', 'पीड़ा', 'नीच', 'उदासीनता', 'दुरिता', 'क्रोध', 'धोखा', 'कष्ट', 'विनाश',
+    // Hindi niche spiritual terms
+    'ठहराव', 'कर्म-ऋण', 'छाया', 'रुकावट', 'निम्न-कंपन', 'विसंगति', 'हैक्स', 'जinx', 'दुष्ट', 'भूतिया',
+    'ग्रहण', 'नक्षत्र-जाल', 'आत्म-नाश', 'शून्यता', 'असंतुलन', 'निंदनीय', 'धुंधला', 'दूषित', 'असंनाद', 'शापित',
+    // Hindi Gen Z slang
+    'cringe', 'fake', 'shady', 'sus', 'drama', 'mess', 'mid', 'flop', 'basic', 'salty',
+    'lame', 'fail', 'boring', 'irritating', 'over', 'nope', 'chhapri', 'bakwas', 'thanda', 'ghatiya'
+  ];
+
+  // Normalize text for multilingual matching (lowercase, Unicode normalization)
+  const textLower = text.toLowerCase().normalize('NFKC');
+
+  // Count aura-related words
+  const positiveWordCount = positiveAuraWords.reduce((count, word) => {
+    return count + (textLower.includes(word.toLowerCase().normalize('NFKC')) ? 1 : 0);
+  }, 0);
+  const negativeWordCount = negativeAuraWords.reduce((count, word) => {
+    return count + (textLower.includes(word.toLowerCase().normalize('NFKC')) ? 1 : 0);
+  }, 0);
+
+  // Calculate aura points
+  let auraPoints = sentimentScore * 10; // Base: -50 to +50
+  auraPoints += positiveWordCount * 15; // +15 per positive word
+  auraPoints -= negativeWordCount * 15; // -15 per negative word
+  auraPoints = Math.max(-100, Math.min(100, Math.round(auraPoints)));
+
+  return auraPoints;
+}
+
+// Aura visualization function with multilingual flair
+function visualizeAura(auraPoints, username) {
+  let color, description, chakra, genZVibe, multilingualFlair;
+
+  if (auraPoints > 50) {
+    color = 'golden';
+    description = `A radiant ${color} aura pulses around ${username}, shimmering with cosmic vibrations and high-vibrational energy. It flows like a divine light, emanating from the crown chakra, filled with starseed essence and pure bliss.`;
+    chakra = 'crown chakra';
+    genZVibe = 'main-character energy, serving highkey-iconic looks!';
+    multilingualFlair = 'Radiating santhosham, खुशी, and poli vibes!';
+  } else if (auraPoints > 0) {
+    color = 'blue';
+    description = `A soothing ${color} aura surrounds ${username}, rippling with tranquility and empathic waves. It glows softly from the third-eye chakra, carrying a serene, uplifting vibration.`;
+    chakra = 'third-eye chakra';
+    genZVibe = 'vibe-check passed, giving aesthetic and soulful energy!';
+    multilingualFlair = 'Flowing with shanthi, शांति, and kidu energy!';
+  } else if (auraPoints === 0) {
+    color = 'white';
+    description = `A neutral ${color} aura encircles ${username}, a balanced energy field with subtle etheric swirls. It resonates from the heart chakra, reflecting a calm, unaligned state.`;
+    chakra = 'heart chakra';
+    genZVibe = 'lowkey chill, just existing with no drama.';
+    multilingualFlair = 'Balanced with aikyam, एकता, and nalla vibes.';
+  } else if (auraPoints > -50) {
+    color = 'grey';
+    description = `A misty ${color} aura clings to ${username}, heavy with unaligned vibrations and faint dissonance. It stirs around the throat chakra, suggesting a need for clarity and expression.`;
+    chakra = 'throat chakra';
+    genZVibe = 'giving side-eye, slightly off-brand vibes.';
+    multilingualFlair = 'Clouded by vishadam, उदासी, and chali energy.';
+  } else {
+    color = 'black';
+    description = `A shadowy ${color} aura envelops ${username}, thick with karmic-debt and lower-vibration energy. It swirls chaotically around the root chakra, craving a spiritual cleanse.`;
+    chakra = 'root chakra';
+    genZVibe = 'big-yikes energy, total vibe-killer.';
+    multilingualFlair = 'Heavy with veruppu, नफरत, and thallu vibes.';
+  }
+
+  return {
+    embed: {
+      title: `${username}'s Aura Visualization 🌌`,
+      description: `${description}\n\n**Chakra Alignment**: ${chakra}\n**Gen Z Vibe**: ${genZVibe}\n**Multilingual Vibe**: ${multilingualFlair}`,
+      color: getEmbedColor(color),
+      timestamp: new Date()
+    }
+  };
+}
+
+// Helper function to assign Discord embed colors
+function getEmbedColor(auraColor) {
+  const colorMap = {
+    golden: 0xFFD700, // Gold
+    blue: 0x00B7EB, // Sky Blue
+    white: 0xFFFFFF, // White
+    grey: 0x808080, // Grey
+    black: 0x2F3136 // Dark (Discord dark theme)
+  };
+  return colorMap[auraColor] || 0x00B7EB; // Default to blue
+}
+
+// Bot ready event: Register slash commands and set status
+client.once('ready', async () => {
+  console.log(`Logged in as ${client.user.tag}`);
+  await registerSlashCommands();
+
+  // Set bot status to "Watching Aura"
+  client.user.setPresence({
+    activities: [{ name: 'Aura', type: ActivityType.Watching }],
+    status: 'online'
+  });
+});
+
+// Interaction event: Handle slash commands
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
+  const command = client.commands.get(interaction.commandName);
+  if (!command) return;
+
+  try {
+    await command.execute(interaction);
+  } catch (error) {
+    console.error('Error executing slash command:', error);
+    await interaction.reply({ content: 'An error occurred while executing the command.', ephemeral: true });
+  }
+});
+
+// Message event: Process aura for non-command messages and handle prefix commands
 client.on('messageCreate', async (message) => {
-    console.log(`[DEBUG] Message received: ${message.content} from ${message.author.tag} in ${message.channel.type} channel`);
+  if (message.author.bot || !message.content) return; // Ignore bots and empty messages
 
-    if (message.author.bot) {
-        console.log('[DEBUG] Ignoring bot message');
-        return;
-    }
-    if (!message.content.startsWith(PREFIX)) {
-        console.log('[DEBUG] Message does not start with prefix');
-        return;
-    }
+  const userId = message.author.id;
+  const username = message.author.username;
+  const text = message.content;
 
-    const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-    const command = args.shift().toLowerCase();
-    console.log(`[DEBUG] Command: ${command}, Args: ${args.join(' ')}`);
+  try {
+    // Handle ;aura command
+    if (text.startsWith(';aura')) {
+      const args = text.split(' ').slice(1);
+      let targetUser;
 
-    // Help Command
-    if (command === 'help') {
-        const embed = new EmbedBuilder()
-            .setTitle('📜 PakshiBot Help')
-            .setDescription('Here are all available commands for PakshiBot, your social media-like Discord bot!')
-            .setColor('#0099ff')
-            .addFields(
-                {
-                    name: ';post [message]',
-                    value:
-                        'Create a post with optional hashtags and attachments (images: PNG/JPG/GIF, videos: MP4/WEBM, e.g., `;post Hello #world` with an image). Others can like (❤️) or dislike (👎) it.',
-                    inline: false,
-                },
-                {
-                    name: ';setprofile [bio]',
-                    value: 'Set your profile bio (e.g., `;setprofile I love coding!`).',
-                    inline: false,
-                },
-                {
-                    name: ';profile [@user]',
-                    value: 'View your or another user’s profile (e.g., `;profile` or `;profile @friend`).',
-                    inline: false,
-                },
-                {
-                    name: ';follow @user',
-                    value: 'Follow a user to get notified of their posts (e.g., `;follow @friend`).',
-                    inline: false,
-                },
-                {
-                    name: ';search #hashtag',
-                    value: 'Search posts by hashtag (e.g., `;search #world`).',
-                    inline: false,
-                },
-                {
-                    name: ';feed',
-                    value: 'View recent posts from users you follow.',
-                    inline: false,
-                },
-                {
-                    name: ';userfeed [@user]',
-                    value: 'View recent posts by a specific user with pagination (e.g., `;userfeed @friend`).',
-                    inline: false,
-                },
-                {
-                    name: ';userpost [@user] [number]',
-                    value: 'View a specific post by a user (e.g., `;userpost @friend 3` for their 3rd most recent post).',
-                    inline: false,
-                },
-                // {
-                //   name: ';deleteprofile',
-                //   value: 'Delete your profile, posts, and follow data.',
-                //   inline: false,
-                // },
-                {
-                    name: ';help',
-                    value: 'Show this help message.',
-                    inline: false,
-                }
-            )
-            .setFooter({ text: `Prefix: ${PREFIX} | Made with ❤️ by PakshiBot` })
-            .setTimestamp();
-
-        try {
-            await message.channel.send({ embeds: [embed] });
-            console.log(`[DEBUG] Help command executed for ${message.author.tag}`);
-        } catch (err) {
-            console.error(`[ERROR] Failed to send help: ${err.message}`);
-            message.reply('Error displaying help.');
+      if (args.length === 0) {
+        targetUser = message.author; // Default to message author
+      } else {
+        const userMention = args[0].match(/^<@!?(\d+)>$/);
+        if (!userMention) {
+          return message.reply('Please mention a valid user (e.g., ;aura @user).');
         }
-        return;
+        targetUser = await message.guild.members.fetch(userMention[1]).catch(() => null);
+        if (!targetUser) {
+          return message.reply('User not found in this server.');
+        }
+        targetUser = targetUser.user;
+      }
+
+      const targetUserData = await User.findOne({ userId: targetUser.id });
+      if (!targetUserData || targetUserData.messageCount === 0) {
+        return message.reply(`${targetUser.username} has no recorded aura yet.`);
+      }
+
+      // Generate aura description
+      let auraDescription = '';
+      if (targetUserData.auraPoints > 50) {
+        auraDescription = 'Radiates positive energy (joy, love, compassion)';
+      } else if (targetUserData.auraPoints > 0) {
+        auraDescription = 'Mildly positive energy (uplifting, kind)';
+      } else if (targetUserData.auraPoints === 0) {
+        auraDescription = 'Neutral energy (balanced, no strong vibe)';
+      } else if (targetUserData.auraPoints > -50) {
+        auraDescription = 'Mildly negative energy (unsettled, low vibe)';
+      } else {
+        auraDescription = 'Radiates negative energy (toxic, dark)';
+      }
+
+      message.reply({
+        embeds: [{
+          title: `${targetUser.username}'s Aura Stats ✨`,
+          description: `**Aura Points**: ${targetUserData.auraPoints}\n**Vibe**: ${auraDescription}\n**Messages Analyzed**: ${targetUserData.messageCount}`,
+          color: 0x00B7EB, // Blue
+          timestamp: new Date()
+        }]
+      });
+      return; // Skip aura analysis
     }
 
-    // Post Command
-    if (command === 'post') {
-        const now = Date.now();
-        const cooldownAmount = 60 * 1000;
-        if (cooldowns.has(message.author.id)) {
-            const expiration = cooldowns.get(message.author.id) + cooldownAmount;
-            if (now < expiration) {
-                console.log(`[DEBUG] User ${message.author.tag} on cooldown`);
-                return message.reply('Please wait before posting again!');
-            }
+    // Handle ;visualize command
+    if (text.startsWith(';visualize')) {
+      const args = text.split(' ').slice(1);
+      let targetUser;
+
+      if (args.length === 0) {
+        targetUser = message.author; // Default to message author
+      } else {
+        const userMention = args[0].match(/^<@!?(\d+)>$/);
+        if (!userMention) {
+          return message.reply('Please mention a valid user (e.g., ;visualize @user).');
         }
-        cooldowns.set(message.author.id, now);
-        setTimeout(() => cooldowns.delete(message.author.id), cooldownAmount);
-
-        const content = args.join(' ') || ' ';
-        console.log(`[DEBUG] Post content: "${content}"`);
-
-        // Process attachments
-        const attachments = message.attachments.filter(
-            (att) =>
-                (ALLOWED_IMAGE_TYPES.includes(att.contentType) || ALLOWED_VIDEO_TYPES.includes(att.contentType)) &&
-                att.size <= MAX_ATTACHMENT_SIZE
-        );
-        console.log(
-            `[DEBUG] Attachments: ${attachments.size} valid (${[...attachments.values()]
-                .map((att) => `${att.name} (${att.contentType})`)
-                .join(', ')})`
-        );
-
-        if (!content.trim() && attachments.size === 0) {
-            console.log('[DEBUG] No content or valid attachments provided for post');
-            return message.reply('Please provide a message or valid image/video attachments!');
+        targetUser = await message.guild.members.fetch(userMention[1]).catch(() => null);
+        if (!targetUser) {
+          return message.reply('User not found in this server.');
         }
+        targetUser = targetUser.user;
+      }
 
-        const hashtags = content.match(/#[^\s#]+/g)?.map((tag) => tag.slice(1)) || [];
-        const post = new Post({
-            userId: message.author.id,
-            content,
-            hashtags,
-            attachments: attachments.map((att) => ({ url: att.url, contentType: att.contentType })), // Store URL and contentType
-        });
+      const targetUserData = await User.findOne({ userId: targetUser.id });
+      if (!targetUserData || targetUserData.messageCount === 0) {
+        return message.reply(`${targetUser.username} has no recorded aura yet.`);
+      }
 
-        try {
-            await post.save();
-            console.log(`[DEBUG] Post saved: ${post._id}, Attachments: ${JSON.stringify(post.attachments)}`);
-        } catch (err) {
-            console.error(`[ERROR] Failed to save post: ${err.message}`);
-            return message.reply('Error saving post.');
-        }
-
-        const embed = new EmbedBuilder()
-            .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
-            .setDescription(content)
-            .setColor('#0099ff')
-            .setTimestamp()
-            .setFooter({ text: `Likes: 0 | Dislikes: 0 | Post ID: ${post._id}` });
-
-        // Add first image to embed
-        const firstImage = attachments.find((att) => ALLOWED_IMAGE_TYPES.includes(att.contentType));
-        if (firstImage) {
-            embed.setImage(firstImage.url);
-            console.log(`[DEBUG] Added image to embed: ${firstImage.url}`);
-        }
-
-        // Add video URLs to description
-        const videos = attachments.filter((att) => ALLOWED_VIDEO_TYPES.includes(att.contentType));
-        if (videos.size > 0) {
-            const videoLinks = videos.map((att) => `[Video: ${att.name}](${att.url})`).join('\n');
-            embed.setDescription(`${content}\n\n${videoLinks}`);
-            console.log(`[DEBUG] Added video links to description: ${videoLinks}`);
-        }
-
-        let postMessage;
-        try {
-            postMessage = await message.channel.send({ embeds: [embed] });
-            await postMessage.react('❤️');
-            await postMessage.react('👎');
-            console.log(`[DEBUG] Post message sent: ${postMessage.id}`);
-        } catch (err) {
-            console.error(`[ERROR] Failed to send post: ${err.message}`);
-            return message.reply('Error sending post. Check my permissions.');
-        }
-
-        const followers = await Follower.find({ followingId: message.author.id });
-        for (const follower of followers) {
-            try {
-                const followerUser = await client.users.fetch(follower.followerId);
-                await followerUser.send(
-                    `${message.author.tag} just posted: ${content}${attachments.size > 0 ? ' (with attachments)' : ''}\nCheck it out in ${message.channel}!`
-                );
-                console.log(`[DEBUG] Notified follower ${followerUser.tag}`);
-            } catch (err) {
-                console.log(`[WARNING] Could not DM follower ${follower.followerId}: ${err.message}`);
-            }
-        }
-
-        message.reply('Your post has been created!');
+      const visualization = visualizeAura(targetUserData.auraPoints, targetUser.username);
+      message.reply({ embeds: [visualization.embed] });
+      return; // Skip aura analysis
     }
 
-    // Set Profile Command
-    if (command === 'setprofile') {
-        const bio = args.join(' ') || 'No bio set.';
-        let profile = await Profile.findOne({ userId: message.author.id });
+    // Process aura for non-command messages
+    const messageAuraPoints = calculateSpiritualAuraPoints(text);
 
-        if (!profile) {
-            profile = new Profile({
-                userId: message.author.id,
-                bio,
-            });
-        } else {
-            profile.bio = bio;
-        }
-
-        await profile.save();
-        message.reply('Profile updated!');
-        console.log(`[DEBUG] Profile updated for ${message.author.tag}`);
+    // Find or create user in database
+    let user = await User.findOne({ userId });
+    if (!user) {
+      user = new User({
+        userId,
+        username,
+        auraPoints: messageAuraPoints,
+        messageCount: 1
+      });
+    } else {
+      // Update aura: Weighted average to smooth fluctuations
+      const newMessageCount = user.messageCount + 1;
+      user.auraPoints = Math.round(
+        (user.auraPoints * user.messageCount + messageAuraPoints) / newMessageCount
+      );
+      user.messageCount = newMessageCount;
+      user.username = username; // Update username in case it changed
+      user.lastUpdated = Date.now();
     }
 
-    // View Profile Command
-    if (command === 'profile') {
-        const target = message.mentions.users.first() || message.author;
-        const profile = await Profile.findOne({ userId: target.id });
-
-        if (!profile) {
-            console.log(`[DEBUG] No profile found for ${target.tag}`);
-            return message.reply('This user has no profile yet.');
-        }
-
-        const embed = new EmbedBuilder()
-            .setAuthor({ name: target.tag, iconURL: target.displayAvatarURL() })
-            .setDescription(`**Bio**: ${profile.bio}`)
-            .addFields(
-                { name: 'Followers', value: profile.followerCount.toString(), inline: true },
-                { name: 'Following', value: profile.followingCount.toString(), inline: true }
-            )
-            .setColor('#0099ff');
-
-        message.channel.send({ embeds: [embed] });
-        console.log(`[DEBUG] Profile displayed for ${target.tag}`);
-    }
-
-    // Follow Command
-    if (command === 'follow') {
-        const target = message.mentions.users.first();
-        if (!target) {
-            console.log('[DEBUG] No target mentioned for follow');
-            return message.reply('Please mention a user to follow!');
-        }
-        if (target.id === message.author.id) {
-            console.log('[DEBUG] User tried to follow themselves');
-            return message.reply('You cannot follow yourself!');
-        }
-
-        const existing = await Follower.findOne({
-            followerId: message.author.id,
-            followingId: target.id,
-        });
-
-        if (existing) {
-            console.log(`[DEBUG] ${message.author.tag} already follows ${target.tag}`);
-            return message.reply('You already follow this user!');
-        }
-
-        const follower = new Follower({
-            followerId: message.author.id,
-            followingId: target.id,
-        });
-
-        await follower.save();
-        await Profile.findOneAndUpdate(
-            { userId: target.id },
-            { $inc: { followerCount: 1 } },
-            { upsert: true, setDefaultsOnInsert: true }
-        );
-        await Profile.findOneAndUpdate(
-            { userId: message.author.id },
-            { $inc: { followingCount: 1 } },
-            { upsert: true, setDefaultsOnInsert: true }
-        );
-
-        message.reply(`You are now following ${target.tag}!`);
-        console.log(`[DEBUG] ${message.author.tag} followed ${target.tag}`);
-    }
-
-    // Search Hashtags Command
-    if (command === 'search') {
-        const tag = args[0]?.replace('#', '');
-        if (!tag) {
-            console.log('[DEBUG] No hashtag provided for search');
-            return message.reply('Please provide a hashtag to search!');
-        }
-
-        const posts = await Post.find({ hashtags: tag }).limit(10);
-        if (!posts.length) {
-            console.log(`[DEBUG] No posts found for hashtag #${tag}`);
-            return message.reply('No posts found with this hashtag.');
-        }
-
-        const embed = new EmbedBuilder()
-            .setTitle(`Posts with #${tag}`)
-            .setColor('#0099ff');
-
-        for (const post of posts) {
-            const tag = await getUserTag(post.userId);
-            embed.addFields({ name: tag, value: post.content, inline: false });
-        }
-
-        message.channel.send({ embeds: [embed] });
-        console.log(`[DEBUG] Search results displayed for #${tag}`);
-    }
-
-    // Feed Command (Your Followed Users, One Post per Page)
-    if (command === 'feed') {
-        const followedUsers = await Follower.find({ followerId: message.author.id }).select('followingId');
-        const totalPosts = await Post.countDocuments({ userId: { $in: followedUsers.map((f) => f.followingId) } });
-        if (totalPosts === 0) {
-            console.log(`[DEBUG] No feed posts for ${message.author.tag}`);
-            return message.reply('No posts from followed users.');
-        }
-
-        let page = 0;
-        async function sendFeedPage(pageNum) {
-            const posts = await Post.find({ userId: { $in: followedUsers.map((f) => f.followingId) } })
-                .sort({ createdAt: -1 })
-                .skip(pageNum)
-                .limit(1);
-
-            const post = posts[0];
-            const userTag = await getUserTag(post.userId);
-            let description = post.content;
-
-            console.log(`[DEBUG] Post attachments: ${JSON.stringify(post.attachments)}`);
-
-            const embed = new EmbedBuilder()
-                .setTitle(`Your Feed (Post ${pageNum + 1}/${totalPosts})`)
-                .setAuthor({ name: userTag, iconURL: (await client.users.fetch(post.userId)).displayAvatarURL() })
-                .setDescription(description)
-                .setColor('#0099ff')
-                .setTimestamp(post.createdAt)
-                .setFooter({ text: `Likes: ${post.likes} | Dislikes: ${post.dislikes} | Post ID: ${post._id}` });
-
-            // Handle attachments
-            if (post.attachments.length > 0) {
-                const firstImage = post.attachments.find((att) => ALLOWED_IMAGE_TYPES.includes(att.contentType));
-                if (firstImage) {
-                    embed.setImage(firstImage.url);
-                    console.log(`[DEBUG] Added image to feed embed: ${firstImage.url}`);
-                } else {
-                    console.log('[DEBUG] No image detected in attachments');
-                }
-                const videoLinks = post.attachments
-                    .filter((att) => ALLOWED_VIDEO_TYPES.includes(att.contentType))
-                    .map((att) => `[Video](${att.url})`)
-                    .join(', ');
-                if (videoLinks) {
-                    description += `\n\n**Attachments**: ${videoLinks}`;
-                    embed.setDescription(description);
-                    console.log(`[DEBUG] Added video links to description: ${videoLinks}`);
-                } else {
-                    console.log('[DEBUG] No video links detected');
-                }
-            } else {
-                console.log('[DEBUG] No attachments for this post');
-            }
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('prev_page')
-                    .setLabel('Previous')
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(pageNum === 0),
-                new ButtonBuilder()
-                    .setCustomId('next_page')
-                    .setLabel('Next')
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(pageNum === totalPosts - 1)
-            );
-
-            return { embed, row, post };
-        }
-
-        try {
-            const { embed, row, post } = await sendFeedPage(page);
-            const feedMessage = await message.channel.send({ embeds: [embed], components: [row] });
-            await feedMessage.react('❤️');
-            await feedMessage.react('👎');
-            console.log(`[DEBUG] Feed displayed for ${message.author.tag}, post ${page + 1}/${totalPosts}`);
-
-            const collector = feedMessage.createMessageComponentCollector({ time: 60000 });
-            collector.on('collect', async (interaction) => {
-                if (interaction.user.id !== message.author.id) {
-                    return interaction.reply({ content: 'Only the command issuer can use these buttons!', ephemeral: true });
-                }
-
-                if (interaction.customId === 'prev_page' && page > 0) {
-                    page--;
-                } else if (interaction.customId === 'next_page' && page < totalPosts - 1) {
-                    page++;
-                }
-
-                const { embed: updatedEmbed, row: updatedRow } = await sendFeedPage(page);
-                await interaction.update({ embeds: [updatedEmbed], components: [updatedRow] });
-                console.log(`[DEBUG] Updated feed to post ${page + 1}/${totalPosts} for ${message.author.tag}`);
-            });
-
-            collector.on('end', () => {
-                feedMessage.edit({ components: [] });
-                console.log(`[DEBUG] Feed collector ended for ${message.author.tag}`);
-            });
-        } catch (err) {
-            console.error(`[ERROR] Failed to send feed: ${err.message}`);
-            message.reply('Error displaying feed.');
-        }
-    }
-
-    // User Feed Command (Specific User's Posts, One Post per Page)
-    if (command === 'userfeed') {
-        const target = message.mentions.users.first();
-        if (!target) {
-            console.log('[DEBUG] No target mentioned for userfeed');
-            return message.reply('Please mention a user to view their feed! (e.g., `;userfeed @friend`)');
-        }
-
-        const totalPosts = await Post.countDocuments({ userId: target.id });
-        if (totalPosts === 0) {
-            console.log(`[DEBUG] No posts found for user ${target.tag}`);
-            return message.reply(`${target.tag} has no posts.`);
-        }
-
-        let page = 0;
-        async function sendFeedPage(pageNum) {
-            const posts = await Post.find({ userId: target.id })
-                .sort({ createdAt: -1 })
-                .skip(pageNum)
-                .limit(1);
-
-            const post = posts[0];
-            let description = post.content;
-
-            console.log(`[DEBUG] Post attachments: ${JSON.stringify(post.attachments)}`);
-
-            const embed = new EmbedBuilder()
-                .setTitle(`${target.tag}'s Feed (Post ${pageNum + 1}/${totalPosts})`)
-                .setAuthor({ name: target.tag, iconURL: target.displayAvatarURL() })
-                .setDescription(description)
-                .setColor('#0099ff')
-                .setTimestamp(post.createdAt)
-                .setFooter({ text: `Likes: ${post.likes} | Dislikes: ${post.dislikes} | Post ID: ${post._id}` });
-
-            // Handle attachments
-            if (post.attachments.length > 0) {
-                const firstImage = post.attachments.find((att) => ALLOWED_IMAGE_TYPES.includes(att.contentType));
-                if (firstImage) {
-                    embed.setImage(firstImage.url);
-                    console.log(`[DEBUG] Added image to userfeed embed: ${firstImage.url}`);
-                } else {
-                    console.log('[DEBUG] No image detected in attachments');
-                }
-                const videoLinks = post.attachments
-                    .filter((att) => ALLOWED_VIDEO_TYPES.includes(att.contentType))
-                    .map((att) => `[Video](${att.url})`)
-                    .join(', ');
-                if (videoLinks) {
-                    description += `\n\n**Attachments**: ${videoLinks}`;
-                    embed.setDescription(description);
-                    console.log(`[DEBUG] Added video links to description: ${videoLinks}`);
-                } else {
-                    console.log('[DEBUG] No video links detected');
-                }
-            } else {
-                console.log('[DEBUG] No attachments for this post');
-            }
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('prev_page')
-                    .setLabel('Previous')
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(pageNum === 0),
-                new ButtonBuilder()
-                    .setCustomId('next_page')
-                    .setLabel('Next')
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(pageNum === totalPosts - 1)
-            );
-
-            return { embed, row, post };
-        }
-
-        try {
-            const { embed, row, post } = await sendFeedPage(page);
-            const feedMessage = await message.channel.send({ embeds: [embed], components: [row] });
-            await feedMessage.react('❤️');
-            await feedMessage.react('👎');
-            console.log(`[DEBUG] User feed displayed for ${target.tag} by ${message.author.tag}, post ${page + 1}/${totalPosts}`);
-
-            const collector = feedMessage.createMessageComponentCollector({ time: 60000 });
-            collector.on('collect', async (interaction) => {
-                if (interaction.user.id !== message.author.id) {
-                    return interaction.reply({ content: 'Only the command issuer can use these buttons!', ephemeral: true });
-                }
-
-                if (interaction.customId === 'prev_page' && page > 0) {
-                    page--;
-                } else if (interaction.customId === 'next_page' && page < totalPosts - 1) {
-                    page++;
-                }
-
-                const { embed: updatedEmbed, row: updatedRow } = await sendFeedPage(page);
-                await interaction.update({ embeds: [updatedEmbed], components: [updatedRow] });
-                console.log(`[DEBUG] Updated user feed to post ${page + 1}/${totalPosts} for ${target.tag}`);
-            });
-
-            collector.on('end', () => {
-                feedMessage.edit({ components: [] });
-                console.log(`[DEBUG] User feed collector ended for ${target.tag}`);
-            });
-        } catch (err) {
-            console.error(`[ERROR] Failed to send user feed: ${err.message}`);
-            message.reply('Error displaying user feed.');
-        }
-    }
-
-    // User Post Command (Specific Post by Index)
-    if (command === 'userpost') {
-        const target = message.mentions.users.first();
-        if (!target) {
-            console.log('[DEBUG] No target mentioned for userpost');
-            return message.reply('Please mention a user! (e.g., `;userpost @friend 3`)');
-        }
-
-        const index = parseInt(args[1], 10);
-        if (isNaN(index) || index < 1) {
-            console.log('[DEBUG] Invalid or missing post index for userpost');
-            return message.reply('Please provide a valid post number! (e.g., `;userpost @friend 3`)');
-        }
-
-        const posts = await Post.find({ userId: target.id }).sort({ createdAt: -1 });
-        if (posts.length === 0) {
-            console.log(`[DEBUG] No posts found for user ${target.tag}`);
-            return message.reply(`${target.tag} has no posts.`);
-        }
-
-        if (index > posts.length) {
-            console.log(`[DEBUG] Post index ${index} out of range for ${target.tag}`);
-            return message.reply(`${target.tag} only has ${posts.length} post(s).`);
-        }
-
-        const post = posts[index - 1];
-        let description = post.content;
-
-        console.log(`[DEBUG] Post attachments: ${JSON.stringify(post.attachments)}`);
-
-        const embed = new EmbedBuilder()
-            .setAuthor({ name: target.tag, iconURL: target.displayAvatarURL() })
-            .setDescription(description)
-            .setColor('#0099ff')
-            .setTimestamp(post.createdAt)
-            .setFooter({ text: `Post #${index} | Likes: ${post.likes} | Dislikes: ${post.dislikes} | Post ID: ${post._id}` });
-
-        // Handle attachments
-        if (post.attachments.length > 0) {
-            const firstImage = post.attachments.find((att) => ALLOWED_IMAGE_TYPES.includes(att.contentType));
-            if (firstImage) {
-                embed.setImage(firstImage.url);
-                console.log(`[DEBUG] Added image to userpost embed: ${firstImage.url}`);
-            } else {
-                console.log('[DEBUG] No image detected in attachments');
-            }
-            const videoLinks = post.attachments
-                .filter((att) => ALLOWED_VIDEO_TYPES.includes(att.contentType))
-                .map((att) => `[Video](${att.url})`)
-                .join(', ');
-            if (videoLinks) {
-                description += `\n\n**Attachments**: ${videoLinks}`;
-                embed.setDescription(description);
-                console.log(`[DEBUG] Added video links to description: ${videoLinks}`);
-            } else {
-                console.log('[DEBUG] No video links detected');
-            }
-        } else {
-            console.log('[DEBUG] No attachments for this post');
-        }
-
-        try {
-            await message.channel.send({ embeds: [embed] });
-            console.log(`[DEBUG] User post #${index} displayed for ${target.tag} by ${message.author.tag}`);
-        } catch (err) {
-            console.error(`[ERROR] Failed to send user post: ${err.message}`);
-            return message.reply('Error displaying user post.');
-        }
-    }
-    // Delete Profile Command
-    // if (command === 'deleteprofile') {
-    //     await Profile.deleteOne({ userId: message.author.id });
-    //     await Post.deleteMany({ userId: message.author.id });
-    //     await Follower.deleteMany({ $or: [{ followerId: message.author.id }, { followingId: message.author.id }] });
-    //     message.reply('Your profile, posts, and follow data have been deleted.');
-    //     console.log(`[DEBUG] Profile deleted for ${message.author.tag}`);
-    // }
+    await user.save();
+  } catch (error) {
+    console.error('Error processing message:', error);
+    message.reply('An error occurred while processing your aura.');
+  }
 });
 
-client.on('messageReactionAdd', async (reaction, user) => {
-    console.log(`[DEBUG] Reaction ${reaction.emoji.name} by ${user.tag} on message ${reaction.message.id}`);
-
-    if (user.bot || !['❤️', '👎'].includes(reaction.emoji.name)) return;
-
-    const message = reaction.message;
-    if (!message.embeds[0]) return;
-
-    const postId = message.embeds[0].data.footer.text.match(/Post ID: (\w+)/)?.[1];
-    if (!postId) {
-        console.log('[DEBUG] No Post ID found in embed footer');
-        return;
-    }
-
-    const post = await Post.findById(postId);
-    if (!post) {
-        console.log(`[DEBUG] Post ${postId} not found`);
-        return;
-    }
-
-    if (user.id === post.userId) {
-        await reaction.users.remove(user.id);
-        console.log(`[DEBUG] Removed self-reaction by ${user.tag}`);
-        return;
-    }
-
-    let updated = false;
-    if (reaction.emoji.name === '❤️' && !post.likers.includes(user.id)) {
-        post.likes += 1;
-        post.likers.push(user.id);
-        updated = true;
-    } else if (reaction.emoji.name === '👎' && !post.dislikers.includes(user.id)) {
-        post.dislikes += 1;
-        post.dislikers.push(user.id);
-        updated = true;
-    }
-
-    if (updated) {
-        await post.save();
-        const updatedEmbed = new EmbedBuilder()
-            .setAuthor(message.embeds[0].author)
-            .setDescription(message.embeds[0].description)
-            .setColor(message.embeds[0].color)
-            .setTimestamp(message.embeds[0].timestamp)
-            .setFooter({ text: `Likes: ${post.likes} | Dislikes: ${post.dislikes} | Post ID: ${post._id}` });
-
-        await message.edit({ embeds: [updatedEmbed] });
-
-        try {
-            const postAuthor = await client.users.fetch(post.userId);
-            const action = reaction.emoji.name === '❤️' ? 'liked' : 'disliked';
-            await postAuthor.send(`${user.tag} ${action} your post: ${post.content}`);
-            console.log(`[DEBUG] Notified ${postAuthor.tag} of ${action} by ${user.tag}`);
-        } catch (err) {
-            console.log(`[WARNING] Could not DM author ${post.userId}: ${err.message}`);
-        }
-    }
-});
-
-client.on('error', (err) => {
-    console.error('[ERROR] Client error:', err);
-});
-
-client.login(process.env.DISCORD_TOKEN).catch((err) => {
-    console.error('[ERROR] Login failed:', err);
-});
+// Login to Discord
+client.login(process.env.DISCORD_TOKEN);
