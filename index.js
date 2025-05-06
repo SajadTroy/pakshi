@@ -2,9 +2,18 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, ActivityType } = require('discord.js');
 const mongoose = require('mongoose');
 const Sentiment = require('sentiment');
-const User = require('./models/User');
 
-// Initialize Discord client with necessary intents
+// User Schema
+const userSchema = new mongoose.Schema({
+  userId: { type: String, required: true, unique: true },
+  username: { type: String, required: true },
+  auraPoints: { type: Number, default: 0 },
+  messageCount: { type: Number, default: 0 },
+  lastUpdated: { type: Date, default: Date.now }
+});
+const User = mongoose.model('User', userSchema);
+
+// Initialize Discord client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -22,302 +31,98 @@ mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTop
 // Slash command collection
 client.commands = new Map();
 
-// Define /help slash command
+// Random content arrays
+const positiveMemes = [
+  { url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExeDRxaTBqYnBzeDVhazFjYjg1OGlmN25mYXFxeXg4czVxaWljd2RudCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/CAxbo8KC2A0y4/giphy.gif', caption: 'Slayin’ with santhosham and खुशी!' }, // Dancing cat
+  { url: 'https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExOGg1NmV3d2tpdWpvaHZicmR1Nms2cHYybzhnOWVzdTF4ZGd3ZWc3bCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Jp4dchTKX6BzGkZ5DL/giphy.gif', caption: 'Poli vibes only, king/queen energy!' }, // Fire vibe
+  { url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExeWFheTF4M3lpZ2YxMGNtMWltbm1oZmNua2I3bHN4anNjeHFqdnR1eiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/zWxXlcFYJZ6BaoL2ce/giphy.gif', caption: 'Highkey iconic, mast aura!' } // Sparkle
+];
+const neutralMemes = [
+  { url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcHN4eTR2M3Jva3Brc21ydXdiMXMwNmU3YW05bmxiMjMxbDJqZ2R1ZCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/qJzZ4APiDZQuJDY7vh/giphy.gif', caption: 'Lowkey chill, just aikyam things.' }, // Shrug
+  { url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcHN4eTR2M3Jva3Brc21ydXdiMXMwNmU3YW05bmxiMjMxbDJqZ2R1ZCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/A6aHBCFqlE0Rq/giphy.gif', caption: 'Nalla vibe, balanced एकता.' }, // Okay vibe
+  { url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcHN4eTR2M3Jva3Brc21ydXdiMXMwNmU3YW05bmxiMjMxbDJqZ2R1ZCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/4WSayDGcgnRe/giphy.gif', caption: 'Just existing, no drama.' } // Meh
+];
+const negativeMemes = [
+  { url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc3VtN285aDZ6bWJnYzI5dGs5M3Iwb243eWVpYW8yZzE0M245bzg3eiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/cS9lGF8gIBdQs/giphy.gif', caption: 'Big yikes, veruppu overload!' }, // Facepalm
+  { url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOG5vM2UyZ3d2aHlhNG9qNzAxbzYyMXJ6YXl2enhxNzhpZDN1em9rZiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/Iu9rM6jqEozoPqbfxn/giphy.gif', caption: 'Thallu energy, नफरत detected.' }, // Cringe
+  { url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHd4czgwcTZ0ZmpjYzVrejB1NzZvMmw3NXU0Z3RoZGM1cnRhb3E1aSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/X4Hn2cuntiSuF5PkVV/giphy.gif', caption: 'Vibe-killer, total chali.' } // Sad Affleck
+];
+
+const randomQuotes = {
+  positive: ['"Your vibe attracts your tribe."', '"Shine like the starseed you are."', '"Manifesting pure bliss, fam!"'],
+  neutral: ['"Balance is the key to serenity."', '"Chillin’ like a sage on a stage."', '"Just flowing with the cosmic current."'],
+  negative: ['"Time for a spiritual glow-up."', '"Karmic debt? Time to cleanse."', '"Low vibes? You got this, fam."']
+};
+
+const multilingualFlair = {
+  positive: ['santhosham', 'खुशी', 'poli', 'mast'],
+  neutral: ['aikyam', 'एकता', 'nalla', 'sahi'],
+  negative: ['veruppu', 'नफरत', 'thallu', 'ghatiya']
+};
+
+// Define slash commands
 const helpCommand = new SlashCommandBuilder()
   .setName('help')
-  .setDescription('Learn how to use the Aura Bot and its commands.');
+  .setDescription('Learn how to use the Aura Bot.');
+
+const auraCommand = new SlashCommandBuilder()
+  .setName('aura')
+  .setDescription('Check a user\'s aura points and vibe.')
+  .addUserOption(option =>
+    option.setName('user')
+      .setDescription('The user to check (defaults to you).')
+      .setRequired(false)
+  );
+
+const visualizeCommand = new SlashCommandBuilder()
+  .setName('visualize')
+  .setDescription('Visualize a user\'s aura with chakra alignment and a meme.')
+  .addUserOption(option =>
+    option.setName('user')
+      .setDescription('The user to visualize (defaults to you).')
+      .setRequired(false)
+  );
 
 client.commands.set(helpCommand.name, {
   data: helpCommand,
   async execute(interaction) {
     const embed = new EmbedBuilder()
       .setTitle('🌌 Aura Bot Help')
-      .setDescription(
-        'The Aura Bot calculates and visualizes your spiritual and Gen Z aura based on your chat messages in English, Malayalam, Manglish, and Hindi. Your aura reflects your vibe, personality, and energy, stored as aura points (-100 to +100).'
-      )
+      .setDescription('The Aura Bot calculates and visualizes your spiritual and Gen Z aura based on your messages in English, Malayalam, Manglish, and Hindi.')
       .addFields(
         {
           name: 'Commands',
           value: `
             **/help** - Show this help message.
-            **;aura @user** - Check a user's aura points and vibe (e.g., ;aura @JohnDoe).
-            **;visualize @user** - Visualize a user's aura with chakra alignment and multilingual flair (e.g., ;visualize @JohnDoe).
+            **/aura [user]** - Check a user's aura points and vibe.
+            **/visualize [user]** - Visualize a user's aura with a chakra, meme, and multilingual flair.
           `
         },
         {
-          name: 'How Aura Works',
-          value: 'Aura points are calculated from your messages using sentiment analysis and keywords (e.g., "santhosham," "खुशी," "vibe-check"). Positive words (+15 points) and negative words (-15 points) shape your aura, smoothed over time.'
-        },
-        {
-          name: 'Visualization',
-          value: 'The ;visualize command describes your aura as a glowing energy field, tied to a chakra (e.g., crown for positive vibes, root for negative). It includes Gen Z slang and multilingual vibes (e.g., "poli," "mast").'
+          name: 'How It Works',
+          value: 'Aura points (-100 to +100) are calculated from messages using sentiment analysis and keywords. Visualizations include a glowing aura, chakra alignment, Gen Z slang, and a vibe-matching meme GIF.'
         },
         {
           name: 'Languages Supported',
-          value: 'English, Malayalam (സന്തോഷം), Manglish (santhosham), Hindi (खुशी). Use spiritual or Gen Z terms to influence your aura!'
+          value: 'English (vibes, slay), Malayalam (സന്തോഷം), Manglish (poli), Hindi (खुशी).'
         }
       )
       .setColor(0x00B7EB)
       .setTimestamp();
-
     await interaction.reply({ embeds: [embed] });
   }
 });
 
-// Register slash commands
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-
-async function registerSlashCommands() {
-  try {
-    console.log('Registering slash commands...');
-    await rest.put(
-      Routes.applicationCommands(process.env.CLIENT_ID), // Global commands
-      { body: [helpCommand.toJSON()] }
-    );
-    console.log('Slash commands registered successfully.');
-  } catch (error) {
-    console.error('Error registering slash commands:', error);
-  }
-}
-
-// Aura calculation function with multilingual keywords
-function calculateSpiritualAuraPoints(text) {
-  if (!text || typeof text !== 'string' || text.trim() === '') {
-    return 0; // Neutral aura for empty/invalid input
-  }
-
-  const sentiment = new Sentiment();
-  const result = sentiment.analyze(text);
-  const sentimentScore = result.score;
-
-  // Multilingual aura keywords (English, Malayalam, Manglish, Hindi)
-  const positiveAuraWords = [
-    // English spiritual terms
-    'joy', 'love', 'compassion', 'kindness', 'peace', 'gratitude', 'healing', 'light', 'blessing', 'hope',
-    'serenity', 'divine', 'harmony', 'wisdom', 'empathy', 'grace', 'radiance', 'tranquility', 'unity', 'forgiveness',
-    'inspiration', 'clarity', 'purity', 'zen', 'soulful', 'uplifting', 'sacred', 'bliss', 'devotion', 'awe',
-    // English niche spiritual terms
-    'chakra', 'cosmic', 'kundalini', 'aura', 'enlightenment', 'ascension', 'vibration', 'starseed', 'manifest', 'aligned',
-    'third-eye', 'satori', 'nirvana', 'prana', 'shakti', 'etheric', 'astral', 'divinity', 'samadhi', 'lightworker',
-    'kismet', 'synchronicity', 'arcane', 'mystic', 'esoteric',
-    // English Gen Z slang
-    'slay', 'vibes', 'iconic', 'real', 'authentic', 'queen', 'king', 'stan', 'inspo', 'bussin',
-    'fire', 'lit', 'goat', 'legend', 'vibe', 'glow', 'energy', 'main-character', 'pop-off', 'bet',
-    'fam', 'hype', 'drip', 'snack', 'yass', 'secure-the-bag', 'on-fleek', 'extra', 'thriving', 'w',
-    // English niche Gen Z slang
-    'sksksk', 'periodt', 'vibe-check', 'and-i-oop', 'tea', 'serving', 'looks', 'snatched', 'big-yikes', 'slaps',
-    'no-skip', 'giving-life', 'mood', 'aesthetic', 'lowkey-w', 'highkey-iconic', 'bop', 'it-hits-different', 'chef-kiss', 'sheesh',
-    // Malayalam spiritual/emotional terms
-    'സന്തോഷം', 'സ്നേഹം', 'കരുണ', 'ദയ', 'സമാധാനം', 'നന്ദി', 'രോഗശാന്തി', 'വെളിച്ചം', 'ആശീർവാദം', 'പ്രതീക്ഷ',
-    'ശാന്തി', 'ദൈവിക', 'ഐക്യം', 'ജ്ഞാനം', 'സഹാനുഭൂതി', 'കൃപ', 'തേജസ്സ്', 'നിശ്ചലത', 'ഏകത', 'ക്ഷമ',
-    'ആത്മാവ്', 'നന്മ', 'വിശുദ്ധി', 'പ്രചോദനം', 'വിമോചനം',
-    // Malayalam niche spiritual terms
-    'ചക്രം', 'ബ്രഹ്മാണ്ഡം', 'കുണ്ഡലിനി', 'ഓറ', 'മോക്ഷം', 'ആരോഹണം', 'സ്പന്ദനം', 'നക്ഷത്രബീജം', 'പ്രകടനം', 'സമന്വയം',
-    'നെറ്റിചക്രം', 'നിർവാണം', 'പ്രാണൻ', 'ശക്തി', 'നീലാകാശം', 'നക്ഷത്രലോകം', 'ദിവ്യത', 'സമാധി', 'വെളിച്ചപ്രവർത്തകൻ',
-    // Manglish spiritual/emotional terms
-    'santhosham', 'sneham', 'karuna', 'daya', 'samadhanam', 'nandi', 'rogashanthi', 'velicham', 'ashirvad', 'pratheeksha',
-    'shanthi', 'daivika', 'aikyam', 'jnanam', 'sahanubhuthi', 'kripa', 'tejas', 'nishchalatha', 'ekatha', 'kshama',
-    'athma', 'nanma', 'vishudhi', 'prachodanam', 'vimochanam',
-    // Manglish niche spiritual terms
-    'chakram', 'brahmandam', 'kundalini', 'aura', 'moksham', 'aarohanam', 'spandanam', 'nakshatrabeejam', 'praktanam', 'samanwayam',
-    'netti-chakram', 'nirvanam', 'pranan', 'shakthi', 'neelakasham', 'nakshatralokam', 'divyatha', 'samadhi', 'velichapravarthakan',
-    // Manglish Gen Z slang
-    'poli', 'vibe', 'kidu', 'mass', 'super', 'adipoli', 'thara', 'jolly', 'chumma', 'fire',
-    'litty', 'goat', 'epic', 'slay', 'onnu-onnu', 'pinnallae', 'katta', 'vibes', 'thirichu', 'nalla',
-    // Hindi spiritual/emotional terms
-    'खुशी', 'प्यार', 'करुणा', 'दया', 'शांति', 'कृतज्ञता', 'उपचार', 'प्रकाश', 'आशीर्वाद', 'आशा',
-    'शान्ति', 'दिव्य', 'एकता', 'ज्ञान', 'सहानुभूति', 'कृपा', 'तेज', 'निश्चलता', 'सामंजस्य', 'क्षमा',
-    'आत्मा', 'सद्भाव', 'पवित्रता', 'प्रेरणा', 'मुक्ति',
-    // Hindi niche spiritual terms
-    'चक्र', 'ब्रह्मांडीय', 'कुंडलिनी', 'आभा', 'मोक्ष', 'उत्थान', 'कंपन', 'नक्षत्रबीज', 'प्रकटीकरण', 'संनाद',
-    'तृतीय-नेत्र', 'निर्वाण', 'प्राण', 'शक्ति', 'आकाशीय', 'नक्षत्रलोक', 'दिव्यता', 'समाधि', 'प्रकाशकर्मी',
-    // Hindi Gen Z slang
-    'banger', 'lit', 'vibe', 'slay', 'fire', 'epic', 'boss', 'dil-se-dil', 'mast', 'jhakaas',
-    'dhamaka', 'fatafati', 'zabardast', 'killer', 'on-point', 'desi-swag', 'bawaal', 'sahi', 'full-on', 'tadka'
-  ];
-  const negativeAuraWords = [
-    // English spiritual terms
-    'hate', 'anger', 'fear', 'sadness', 'toxic', 'dark', 'curse', 'jealousy', 'resentment', 'pain',
-    'malice', 'dread', 'spite', 'grudge', 'sorrow', 'despair', 'negativity', 'bitterness', 'torment', 'envy',
-    'chaos', 'disharmony', 'anguish', 'vile', 'gloom', 'misery', 'wrath', 'deceit', 'suffering', 'doom',
-    // English niche spiritual terms
-    'stagnation', 'karmic-debt', 'shadow', 'blockage', 'lower-vibration', 'discord', 'hex', 'jinx', 'malevolent', 'haunted',
-    'eclipsed', 'astral-trap', 'soul-drain', 'void', 'dissonance', 'baneful', 'obscured', 'tainted', 'unaligned', 'cursed',
-    // English Gen Z slang
-    'cringe', 'fake', 'shady', 'sus', 'drama', 'messy', 'mid', 'clout-chaser', 'flop', 'basic',
-    'salty', 'pressed', 'lame', 'ratio', 'cap', 'no-cap', 'ghosted', 'canceled', 'tea-spiller', 'try-hard',
-    'extra-in-a-bad-way', 'lowkey-toxic', 'vibe-killer', 'problematic', 'red-flag', 'ick', 'overrated', 'done',
-    // English niche Gen Z slang
-    'oop', 'flopped', 'giving-ick', 'big-yikes', 'tea-spilled', 'ratioed', 'delulu', 'situationship', 'fumbled', 'zesty',
-    'unserious', 'not-the-vibe', 'off-brand', 'giving-side-eye', 'cooked', 'out-of-pocket', 'no-maam', 'left-on-read', 'tragic', 'skipped',
-    // Malayalam spiritual/emotional terms
-    'വെറുപ്പ്', 'ദേഷ്യം', 'ഭയം', 'വിഷാദം', 'വിഷമയം', 'ഇരുട്ട്', 'ശാപം', 'അസൂയ', 'പക', 'വേദന',
-    'ദുരുദ്ദേശ്യം', 'ഭീതി', 'നിന്ദ', 'പിണക്കം', 'ദുഃഖം', 'നിരാശ', 'നെഗറ്റിവിറ്റി', 'കയ്പ്', 'പീഡനം', 'ഈർഷ്യ',
-    'കുഴപ്പം', 'അസന്തുലിത', 'വ്യഥ', 'നീചം', 'ഗ്ലൂം', 'ദുരിതം', 'ക്രോധം', 'വഞ്ചന', 'കഷ്ടപ്പാട്', 'വിനാശം',
-    // Malayalam niche spiritual terms
-    'നിശ്ചലത', 'കർമ്മബാധ', 'നിഴൽ', 'തടസ്സം', 'താഴ്ന്ന-സ്പന്ദനം', 'വിയോജിപ്പ്', 'ശാപഗ്രസ്ത', 'ദോഷം', 'ദുഷ്ട', 'പേടിസ്വപ്നം',
-    'ഗ്രഹണം', 'നക്ഷത്ര-കെണി', 'ആത്മ-നാശം', 'ശൂന്യത', 'വിസന്തുലനം', 'നിന്ദനീയം', 'മങ്ങിയ', 'മലിനം', 'വിട്ടുപോകൽ', 'ശപിക്കപ്പെട്ട',
-    // Manglish spiritual/emotional terms
-    'veruppu', 'deshyam', 'bhayam', 'vishadam', 'vishamayam', 'iruttu', 'shapam', 'asooya', 'paka', 'vedana',
-    'duruddeshyam', 'bheethi', 'ninda', 'pinakkam', 'dukham', 'nirasha', 'negativity', 'kaipp', 'peedanam', 'irshya',
-    'kuzhappam', 'asanthulitha', 'vyatha', 'neecham', 'gloom', 'duritham', 'krodham', 'vanchanam', 'kashtapad', 'vinasham',
-    // Manglish niche spiritual terms
-    'nishchalatha', 'karmabhaada', 'nizhal', 'thadassam', 'thaazhnna-spandanam', 'viyojipp', 'shapagrasta', 'dosham', 'dushta', 'pediswapnam',
-    'grahanam', 'nakshatrakeni', 'athmanasham', 'shoonyatha', 'visanthulanam', 'nindaneeyam', 'mangiya', 'malinam', 'vittupokkal', 'shapikkapetta',
-    // Manglish Gen Z slang
-    'thallu', 'bakwas', 'cringe', 'vatt', 'drama', 'kuzhappam', 'mid', 'fake', 'shady', 'sus',
-    'chali', 'venda', 'lame', 'flop', 'bore', 'irritating', 'over', 'no-way', 'chumma-vatt', 'pottan',
-    // Hindi spiritual/emotional terms
-    'नफरत', 'गुस्सा', 'डर', 'उदासी', 'विषाक्त', 'अंधेरा', 'शाप', 'ईर्ष्या', 'द्वेष', 'दर्द',
-    'दुर्भावना', 'भय', 'निंदा', 'मनमुटाव', 'दुख', 'निराशा', 'नकारात्मकता', 'कटुता', 'यातना', 'द्वेष',
-    'अराजकता', 'असामंजस्य', 'पीड़ा', 'नीच', 'उदासीनता', 'दुरिता', 'क्रोध', 'धोखा', 'कष्ट', 'विनाश',
-    // Hindi niche spiritual terms
-    'ठहराव', 'कर्म-ऋण', 'छाया', 'रुकावट', 'निम्न-कंपन', 'विसंगति', 'हैक्स', 'जinx', 'दुष्ट', 'भूतिया',
-    'ग्रहण', 'नक्षत्र-जाल', 'आत्म-नाश', 'शून्यता', 'असंतुलन', 'निंदनीय', 'धुंधला', 'दूषित', 'असंनाद', 'शापित',
-    // Hindi Gen Z slang
-    'cringe', 'fake', 'shady', 'sus', 'drama', 'mess', 'mid', 'flop', 'basic', 'salty',
-    'lame', 'fail', 'boring', 'irritating', 'over', 'nope', 'chhapri', 'bakwas', 'thanda', 'ghatiya'
-  ];
-
-  // Normalize text for multilingual matching (lowercase, Unicode normalization)
-  const textLower = text.toLowerCase().normalize('NFKC');
-
-  // Count aura-related words
-  const positiveWordCount = positiveAuraWords.reduce((count, word) => {
-    return count + (textLower.includes(word.toLowerCase().normalize('NFKC')) ? 1 : 0);
-  }, 0);
-  const negativeWordCount = negativeAuraWords.reduce((count, word) => {
-    return count + (textLower.includes(word.toLowerCase().normalize('NFKC')) ? 1 : 0);
-  }, 0);
-
-  // Calculate aura points
-  let auraPoints = sentimentScore * 10; // Base: -50 to +50
-  auraPoints += positiveWordCount * 15; // +15 per positive word
-  auraPoints -= negativeWordCount * 15; // -15 per negative word
-  auraPoints = Math.max(-100, Math.min(100, Math.round(auraPoints)));
-
-  return auraPoints;
-}
-
-// Aura visualization function with multilingual flair
-function visualizeAura(auraPoints, username) {
-  let color, description, chakra, genZVibe, multilingualFlair;
-
-  if (auraPoints > 50) {
-    color = 'golden';
-    description = `A radiant ${color} aura pulses around ${username}, shimmering with cosmic vibrations and high-vibrational energy. It flows like a divine light, emanating from the crown chakra, filled with starseed essence and pure bliss.`;
-    chakra = 'crown chakra';
-    genZVibe = 'main-character energy, serving highkey-iconic looks!';
-    multilingualFlair = 'Radiating santhosham, खुशी, and poli vibes!';
-  } else if (auraPoints > 0) {
-    color = 'blue';
-    description = `A soothing ${color} aura surrounds ${username}, rippling with tranquility and empathic waves. It glows softly from the third-eye chakra, carrying a serene, uplifting vibration.`;
-    chakra = 'third-eye chakra';
-    genZVibe = 'vibe-check passed, giving aesthetic and soulful energy!';
-    multilingualFlair = 'Flowing with shanthi, शांति, and kidu energy!';
-  } else if (auraPoints === 0) {
-    color = 'white';
-    description = `A neutral ${color} aura encircles ${username}, a balanced energy field with subtle etheric swirls. It resonates from the heart chakra, reflecting a calm, unaligned state.`;
-    chakra = 'heart chakra';
-    genZVibe = 'lowkey chill, just existing with no drama.';
-    multilingualFlair = 'Balanced with aikyam, एकता, and nalla vibes.';
-  } else if (auraPoints > -50) {
-    color = 'grey';
-    description = `A misty ${color} aura clings to ${username}, heavy with unaligned vibrations and faint dissonance. It stirs around the throat chakra, suggesting a need for clarity and expression.`;
-    chakra = 'throat chakra';
-    genZVibe = 'giving side-eye, slightly off-brand vibes.';
-    multilingualFlair = 'Clouded by vishadam, उदासी, and chali energy.';
-  } else {
-    color = 'black';
-    description = `A shadowy ${color} aura envelops ${username}, thick with karmic-debt and lower-vibration energy. It swirls chaotically around the root chakra, craving a spiritual cleanse.`;
-    chakra = 'root chakra';
-    genZVibe = 'big-yikes energy, total vibe-killer.';
-    multilingualFlair = 'Heavy with veruppu, नफरत, and thallu vibes.';
-  }
-
-  return {
-    embed: {
-      title: `${username}'s Aura Visualization 🌌`,
-      description: `${description}\n\n**Chakra Alignment**: ${chakra}\n**Gen Z Vibe**: ${genZVibe}\n**Multilingual Vibe**: ${multilingualFlair}`,
-      color: getEmbedColor(color),
-      timestamp: new Date()
-    }
-  };
-}
-
-// Helper function to assign Discord embed colors
-function getEmbedColor(auraColor) {
-  const colorMap = {
-    golden: 0xFFD700, // Gold
-    blue: 0x00B7EB, // Sky Blue
-    white: 0xFFFFFF, // White
-    grey: 0x808080, // Grey
-    black: 0x2F3136 // Dark (Discord dark theme)
-  };
-  return colorMap[auraColor] || 0x00B7EB; // Default to blue
-}
-
-// Bot ready event: Register slash commands and set status
-client.once('ready', async () => {
-  console.log(`Logged in as ${client.user.tag}`);
-  await registerSlashCommands();
-
-  // Set bot status to "Watching Aura"
-  client.user.setPresence({
-    activities: [{ name: 'Aura', type: ActivityType.Watching }],
-    status: 'online'
-  });
-});
-
-// Interaction event: Handle slash commands
-client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-
-  const command = client.commands.get(interaction.commandName);
-  if (!command) return;
-
-  try {
-    await command.execute(interaction);
-  } catch (error) {
-    console.error('Error executing slash command:', error);
-    await interaction.reply({ content: 'An error occurred while executing the command.', ephemeral: true });
-  }
-});
-
-// Message event: Process aura for non-command messages and handle prefix commands
-client.on('messageCreate', async (message) => {
-  if (message.author.bot || !message.content) return; // Ignore bots and empty messages
-
-  const userId = message.author.id;
-  const username = message.author.username;
-  const text = message.content;
-
-  try {
-    // Handle ;aura command
-    if (text.startsWith(';aura')) {
-      const args = text.split(' ').slice(1);
-      let targetUser;
-
-      if (args.length === 0) {
-        targetUser = message.author; // Default to message author
-      } else {
-        const userMention = args[0].match(/^<@!?(\d+)>$/);
-        if (!userMention) {
-          return message.reply('Please mention a valid user (e.g., ;aura @user).');
-        }
-        targetUser = await message.guild.members.fetch(userMention[1]).catch(() => null);
-        if (!targetUser) {
-          return message.reply('User not found in this server.');
-        }
-        targetUser = targetUser.user;
-      }
-
+client.commands.set(auraCommand.name, {
+  data: auraCommand,
+  async execute(interaction) {
+    const targetUser = interaction.options.getUser('user') || interaction.user;
+    try {
       const targetUserData = await User.findOne({ userId: targetUser.id });
       if (!targetUserData || targetUserData.messageCount === 0) {
-        return message.reply(`${targetUser.username} has no recorded aura yet.`);
+        return interaction.reply(`${targetUser.username} has no recorded aura yet.`);
       }
 
-      // Generate aura description
       let auraDescription = '';
       if (targetUserData.auraPoints > 50) {
         auraDescription = 'Radiates positive energy (joy, love, compassion)';
@@ -331,50 +136,188 @@ client.on('messageCreate', async (message) => {
         auraDescription = 'Radiates negative energy (toxic, dark)';
       }
 
-      message.reply({
-        embeds: [{
-          title: `${targetUser.username}'s Aura Stats ✨`,
-          description: `**Aura Points**: ${targetUserData.auraPoints}\n**Vibe**: ${auraDescription}\n**Messages Analyzed**: ${targetUserData.messageCount}`,
-          color: 0x00B7EB, // Blue
-          timestamp: new Date()
-        }]
-      });
-      return; // Skip aura analysis
+      const embed = new EmbedBuilder()
+        .setTitle(`${targetUser.username}'s Aura Stats ✨`)
+        .setDescription(`**Aura Points**: ${targetUserData.auraPoints}\n**Vibe**: ${auraDescription}\n**Messages Analyzed**: ${targetUserData.messageCount}`)
+        .setColor(0x00B7EB)
+        .setTimestamp();
+      await interaction.reply({ embeds: [embed] });
+    } catch (error) {
+      console.error('Error executing /aura:', error);
+      await interaction.reply({ content: 'Failed to fetch aura data.', ephemeral: true });
     }
+  }
+});
 
-    // Handle ;visualize command
-    if (text.startsWith(';visualize')) {
-      const args = text.split(' ').slice(1);
-      let targetUser;
-
-      if (args.length === 0) {
-        targetUser = message.author; // Default to message author
-      } else {
-        const userMention = args[0].match(/^<@!?(\d+)>$/);
-        if (!userMention) {
-          return message.reply('Please mention a valid user (e.g., ;visualize @user).');
-        }
-        targetUser = await message.guild.members.fetch(userMention[1]).catch(() => null);
-        if (!targetUser) {
-          return message.reply('User not found in this server.');
-        }
-        targetUser = targetUser.user;
-      }
-
+client.commands.set(visualizeCommand.name, {
+  data: visualizeCommand,
+  async execute(interaction) {
+    const targetUser = interaction.options.getUser('user') || interaction.user;
+    try {
       const targetUserData = await User.findOne({ userId: targetUser.id });
       if (!targetUserData || targetUserData.messageCount === 0) {
-        return message.reply(`${targetUser.username} has no recorded aura yet.`);
+        return interaction.reply(`${targetUser.username} has no recorded aura yet.`);
       }
 
       const visualization = visualizeAura(targetUserData.auraPoints, targetUser.username);
-      message.reply({ embeds: [visualization.embed] });
-      return; // Skip aura analysis
+      await interaction.reply({ embeds: [visualization.embed] });
+    } catch (error) {
+      console.error('Error executing /visualize:', error);
+      await interaction.reply({ content: 'Failed to visualize aura.', ephemeral: true });
     }
+  }
+});
 
-    // Process aura for non-command messages
+// Register slash commands
+const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+async function registerSlashCommands() {
+  try {
+    console.log('Registering slash commands...');
+    await rest.put(
+      Routes.applicationCommands(process.env.CLIENT_ID),
+      { body: [helpCommand.toJSON(), auraCommand.toJSON(), visualizeCommand.toJSON()] }
+    );
+    console.log('Slash commands registered successfully.');
+  } catch (error) {
+    console.error('Error registering slash commands:', error);
+  }
+}
+
+// Aura calculation function (unchanged for brevity, same as original)
+function calculateSpiritualAuraPoints(text) {
+  if (!text || typeof text !== 'string' || text.trim() === '') return 0;
+
+  const sentiment = new Sentiment();
+  const result = sentiment.analyze(text);
+  const sentimentScore = result.score;
+
+  const positiveAuraWords = [
+    'joy', 'love', 'compassion', 'kindness', 'peace', 'gratitude', 'healing', 'light', 'blessing', 'hope',
+    'slay', 'vibes', 'iconic', 'real', 'authentic', 'queen', 'king', 'stan', 'inspo', 'bussin',
+    'സന്തോഷം', 'സ്നേഹം', 'കരുണ', 'ദയ', 'സമാധാനം', 'നന്ദി', 'രോഗശാന്തി', 'വെളിച്ചം', 'ആശീർവാദം', 'പ്രതീക്ഷ',
+    'santhosham', 'sneham', 'karuna', 'daya', 'samadhanam', 'nandi', 'rogashanthi', 'velicham', 'ashirvad', 'pratheeksha',
+    'poli', 'vibe', 'kidu', 'mass', 'super', 'adipoli', 'thara', 'jolly', 'chumma', 'fire',
+    'खुशी', 'प्यार', 'करुणा', 'दया', 'शांति', 'कृतज्ञता', 'उपचार', 'प्रकाश', 'आशीर्वाद', 'आशा',
+    'banger', 'lit', 'vibe', 'slay', 'fire', 'epic', 'boss', 'dil-se-dil', 'mast', 'jhakaas'
+  ];
+  const negativeAuraWords = [
+    'hate', 'anger', 'fear', 'sadness', 'toxic', 'dark', 'curse', 'jealousy', 'resentment', 'pain',
+    'cringe', 'fake', 'shady', 'sus', 'drama', 'messy', 'mid', 'clout-chaser', 'flop', 'basic',
+    'വെറുപ്പ്', 'ദേഷ്യം', 'ഭയം', 'വിഷാദം', 'വിഷമയം', 'ഇരുട്ട്', 'ശാപം', 'അസൂയ', 'പക', 'വേദന',
+    'veruppu', 'deshyam', 'bhayam', 'vishadam', 'vishamayam', 'iruttu', 'shapam', 'asooya', 'paka', 'vedana',
+    'thallu', 'bakwas', 'cringe', 'vatt', 'drama', 'kuzhappam', 'mid', 'fake', 'shady', 'sus',
+    'नफरत', 'गुस्सा', 'डर', 'उदासी', 'विषाक्त', 'अंधेरा', 'शाप', 'ईर्ष्या', 'द्वेष', 'दर्द',
+    'cringe', 'fake', 'shady', 'sus', 'drama', 'mess', 'mid', 'flop', 'basic', 'salty'
+  ];
+
+  const textLower = text.toLowerCase().normalize('NFKC');
+  const positiveWordCount = positiveAuraWords.reduce((count, word) => {
+    return count + (textLower.includes(word.toLowerCase().normalize('NFKC')) ? 1 : 0);
+  }, 0);
+  const negativeWordCount = negativeAuraWords.reduce((count, word) => {
+    return count + (textLower.includes(word.toLowerCase().normalize('NFKC')) ? 1 : 0);
+  }, 0);
+
+  let auraPoints = sentimentScore * 10;
+  auraPoints += positiveWordCount * 15;
+  auraPoints -= negativeWordCount * 15;
+  auraPoints = Math.max(-100, Math.min(100, Math.round(auraPoints)));
+  return auraPoints;
+}
+
+// Aura visualization function with meme GIF and random content
+function visualizeAura(auraPoints, username) {
+  let color, description, chakra, genZVibe, meme, quote, flair;
+  const auraType = auraPoints > 0 ? 'positive' : auraPoints === 0 ? 'neutral' : 'negative';
+  const memePool = auraType === 'positive' ? positiveMemes : auraType === 'neutral' ? neutralMemes : negativeMemes;
+  meme = memePool[Math.floor(Math.random() * memePool.length)];
+  quote = randomQuotes[auraType][Math.floor(Math.random() * randomQuotes[auraType].length)];
+  flair = multilingualFlair[auraType][Math.floor(Math.random() * multilingualFlair[auraType].length)];
+
+  if (auraPoints > 50) {
+    color = 'golden';
+    description = `A radiant ${color} aura pulses around ${username}, shimmering with cosmic vibes. It flows from the crown chakra, pure bliss!`;
+    chakra = 'crown chakra';
+    genZVibe = 'main-character energy, serving iconic looks!';
+  } else if (auraPoints > 0) {
+    color = 'blue';
+    description = `A soothing ${color} aura surrounds ${username}, rippling with tranquility. It glows from the third-eye chakra, uplifting and serene.`;
+    chakra = 'third-eye chakra';
+    genZVibe = 'vibe-check passed, aesthetic energy!';
+  } else if (auraPoints === 0) {
+    color = 'white';
+    description = `A neutral ${color} aura encircles ${username}, balanced with subtle swirls. It resonates from the heart chakra, calm and chill.`;
+    chakra = 'heart chakra';
+    genZVibe = 'lowkey chill, no drama.';
+  } else if (auraPoints > -50) {
+    color = 'grey';
+    description = `A misty ${color} aura clings to ${username}, heavy with faint dissonance. It stirs around the throat chakra, needing clarity.`;
+    chakra = 'throat chakra';
+    genZVibe = 'giving side-eye, slightly off-brand.';
+  } else {
+    color = 'black';
+    description = `A shadowy ${color} aura envelops ${username}, thick with low-vibe energy. It swirls around the root chakra, craving a cleanse.`;
+    chakra = 'root chakra';
+    genZVibe = 'big-yikes energy, total vibe-killer.';
+  }
+
+  return {
+    embed: new EmbedBuilder()
+      .setTitle(`${username}'s Aura Visualization 🌌`)
+      .setDescription(`${description}\n\n**Chakra Alignment**: ${chakra}\n**Gen Z Vibe**:nobyl
+
+System: **Gen Z Vibe**: ${genZVibe}\n**Vibe Quote**: ${quote}\n**Multilingual Flair**: ${flair}`)
+      .setColor(getEmbedColor(color))
+      .setImage(meme.url)
+      .setFooter({ text: meme.caption })
+      .setTimestamp()
+  };
+}
+
+// Helper function to assign Discord embed colors
+function getEmbedColor(auraColor) {
+  const colorMap = {
+    golden: 0xFFD700,
+    blue: 0x00B7EB,
+    white: 0xFFFFFF,
+    grey: 0x808080,
+    black: 0x2F3136
+  };
+  return colorMap[auraColor] || 0x00B7EB;
+}
+
+// Bot ready event
+client.once('ready', async () => {
+  console.log(`Logged in as ${client.user.tag}`);
+  await registerSlashCommands();
+  client.user.setPresence({
+    activities: [{ name: 'Aura Vibes', type: ActivityType.Watching }],
+    status: 'online'
+  });
+});
+
+// Interaction event
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+  const command = client.commands.get(interaction.commandName);
+  if (!command) return;
+  try {
+    await command.execute(interaction);
+  } catch (error) {
+    console.error('Error executing command:', error);
+    await interaction.reply({ content: 'An error occurred!', ephemeral: true });
+  }
+});
+
+// Message event: Process aura for non-command messages
+client.on('messageCreate', async (message) => {
+  if (message.author.bot || !message.content) return;
+  const userId = message.author.id;
+  const username = message.author.username;
+  const text = message.content;
+
+  try {
     const messageAuraPoints = calculateSpiritualAuraPoints(text);
-
-    // Find or create user in database
     let user = await User.findOne({ userId });
     if (!user) {
       user = new User({
@@ -384,20 +327,17 @@ client.on('messageCreate', async (message) => {
         messageCount: 1
       });
     } else {
-      // Update aura: Weighted average to smooth fluctuations
       const newMessageCount = user.messageCount + 1;
       user.auraPoints = Math.round(
         (user.auraPoints * user.messageCount + messageAuraPoints) / newMessageCount
       );
       user.messageCount = newMessageCount;
-      user.username = username; // Update username in case it changed
+      user.username = username;
       user.lastUpdated = Date.now();
     }
-
     await user.save();
   } catch (error) {
     console.error('Error processing message:', error);
-    message.reply('An error occurred while processing your aura.');
   }
 });
 
